@@ -1,4 +1,4 @@
-IBM ThinkPad SMAPI Driver v0.17
+IBM ThinkPad SMAPI Driver v0.18
 Author:  Shem Multinymous <multinymous@gmail.com>
 Project: http://sourceforge.net/projects/tpctl
 Wiki:    http://thinkwiki.org/wiki/tp_smapi
@@ -188,11 +188,15 @@ README                       This file
 CHANGES                      Change log
 Makefile                     Makefile (see "Installation" above)
 tp_smapi.c                   tp_smapi driver (main code)
-tp_base.*                    tp_base driver (coordinates hw access between tp_smapi and hdaps)
-diff/hdaps-2.4.15.diff       Patch to make the hdaps driver use tp_base, for kernel 2.6.15
-diff/hdaps-2.4.14.diff.diff  Patches the above patch to make it apply to kernel 2.6.{13,14}
-diff/*                       (rest) used by "make patch" to create a clean stand-alone patch
-include                      Contains a symlink to make gcc happy.
+tp_base.*                    tp_base driver (coordinates hardware access 
+                               between tp_smapi and hdaps)
+diff/hdaps.diff              Patch to make the hdaps driver use tp_base,
+                               plus several fixes to vanilla hdaps.c.
+diff/hdaps-2.6.14.diff.diff  Patches the above patch, to make it apply to 
+                               kernel 2.6.{13,14}
+diff/*  (excluding above)    Used by "make patch" to create a clean 
+                               stand-alone patch
+include/                     Contains a symlink to make gcc happy.
 
 
 Ideas for improvement

@@ -6,11 +6,13 @@
  *  models in which the SMAPI BIOS runs in SMM and is invoked by writing
  *  to the APM control port 0xB2. Older models use a different interface; 
  *  for those, try the "thinkpad" module.
+ *  It also exposes battery status information, obtained from the ThinkPad
+ *  embedded controller (via the tp_base module).
  *
  *
- *  Copyright (C) 2005 Shem Multinymous <multinymous@gmail.com>
+ *  Copyright (C) 2005 Shem Multinymous <multinymous@gmail.com>.
  *  SMAPI access code based on the mwave driver by Mike Sullivan,
- *  Copyright (C) 1999 IBM Corporation
+ *  Copyright (C) 1999 IBM Corporation.
  *  Module interface and DMI whitelist based on the hdaps module by
  *  Robert Love and Jesper Juhl.
  *
@@ -29,7 +31,7 @@
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#define TP_VERSION "0.17"
+#define TP_VERSION "0.18"
 
 #include <linux/kernel.h>
 #include <linux/module.h>
@@ -189,6 +191,9 @@ retry:
 	DPRINTK("req_in: BX=%x CX=%x DI=%x SI=%x\n",
 		(int)inBX, (int)inCX, (int)inDI, (int)inSI);
 
+	tp_controller_lock(); /* SMAPI and tp_base use different interfaces to
+	                       * the same chip, so stay on the safe side.      */
+
 	__asm__ __volatile__(
 		"movl  $0x00005380,%%eax\n\t"
 		"movl  %6,%%ebx\n\t"
@@ -210,9 +215,13 @@ retry:
 		 "=m"(myoutDX),
 		 "=m"(myoutDI),
 		 "=m"(myoutSI)
-		:"m"(inBX), "m"(inCX), "m"(inDI), "m"(inSI), "m"((u16)smapi_port)
+		:"m"(inBX), "m"(inCX), "m"(inDI), "m"(inSI),
+		 "m"((u16)smapi_port)
 		:"%eax", "%ebx", "%ecx", "%edx", "%edi",
 		 "%esi");
+
+	tp_controller_invalidate();
+	tp_controller_unlock();
 
 	*outAX=myoutAX; *outBX=myoutBX; *outCX=myoutCX;
 	*outDX=myoutDX; *outDI=myoutDI; *outSI=myoutSI;
@@ -224,7 +233,8 @@ retry:
 	*msg = smapi_rc[i].msg;
 
 	DPRINTK("req_out: AX=%x BX=%x CX=%x DX=%x DI=%x SI=%x ret=%d\n",
-	        (int)*outAX, (int)*outBX, (int)*outCX, (int)*outDX, (int)*outDI, (int)*outSI, ret);
+	        (int)*outAX, (int)*outBX, (int)*outCX, (int)*outDX,
+	        (int)*outDI, (int)*outSI, ret);
 	if (ret)
 		printk(TP_NOTICE "SMAPI error: %s (func=%x)\n", *msg, (int)inBX);
 
@@ -269,7 +279,7 @@ static int smapi_write(u32 inBX, u32 inCX,
  */
 
 /* Lock controller and read row */
-int tpc_read_row(u8 arg1610, u8 arg161F, u8* buf) {
+static int tpc_read_row(u8 arg1610, u8 arg161F, u8* buf) {
 	int ret;
 	tp_controller_lock();
 	ret = tp_controller_read_row(arg1610, arg161F, buf);
@@ -353,7 +363,8 @@ static int set_real_thresh(int bat, int start, int thresh) {
 
 	ret = smapi_write(bx, cx, getDI, getSI, &msg);
 	if (ret)
-		printk(TP_NOTICE "cannot set %s thresh of battery %d to %d: %s\n", 
+		printk(TP_NOTICE
+		       "cannot set %s thresh of battery %d to %d: %s\n", 
                        start?"start":"stop", bat, thresh, msg);
 	else
 		printk(TP_INFO "battery %d: changed %s threshold to %d%s\n",
@@ -403,23 +414,26 @@ static int set_inhibit_charge(int bat, int minutes) {
 	u8 getCL;
 	const char* msg;
 	int ret;
-	ret = get_inhibit_charge(bat, NULL, &getCL); /* verify read before writing */
+	/* verify read before writing */
+	ret = get_inhibit_charge(bat, NULL, &getCL); 
 	if (ret)
 		return ret;
 	cx = ((bat+1)<<8) | (getCL&0x00FE) | (minutes>0 ? 0x0001 : 0x0000);
 	ret = smapi_write(SMAPI_SET_INHIBIT_CHARGE_STATUS, cx, 
                           0, (u32)minutes, &msg);
 	if (ret)
-		printk(TP_NOTICE "cannot set inhibit charge of battery %d to %d: %s\n", 
+		printk(TP_NOTICE
+		       "cannot set inhibit charge of battery %d to %d: %s\n", 
 		       bat, minutes, msg);
 	else
-		printk(TP_INFO "battery %d: inhibited charge for %d minutes\n", 
+		printk(TP_INFO
+		       "battery %d: inhibited charge for %d minutes\n", 
 		       bat, minutes);
 	return ret;
 }
 
 /* Get status of forced battery discharge */
-int get_force_discharge(int bat, int *enabled) 
+static int get_force_discharge(int bat, int *enabled) 
 {
 	u32 cx = (bat+1)<<8;
 	const char* msg;
@@ -427,7 +441,8 @@ int get_force_discharge(int bat, int *enabled)
 	int ret = smapi_read(SMAPI_GET_DISCHARGE_STATUS, cx, 0, 0, 
 	                     NULL, &cx, NULL, NULL, NULL, &msg);
 	if (ret) {
-		printk(TP_NOTICE "cannot get force_discharge of battery %d: %s\n", 
+		printk(TP_NOTICE
+		       "cannot get force_discharge of battery %d: %s\n", 
                        bat, msg);
 		return ret;
 	}
@@ -455,7 +470,8 @@ static int set_force_discharge(int bat, int enabled) {
 	int ret = smapi_read(SMAPI_GET_DISCHARGE_STATUS, cx, 0, 0, 
 	                     NULL, &cx, NULL, NULL, NULL, &msg);
 	if (ret) {
-		printk(TP_NOTICE "cannot get force_discharge of battery %d: %s\n", 
+		printk(TP_NOTICE
+		       "cannot get force_discharge of battery %d: %s\n", 
                        bat, msg);
 		return ret;
 	}
@@ -467,10 +483,11 @@ static int set_force_discharge(int bat, int enabled) {
 	cx = ((bat+1)<<8) | (cx&0xFA) | (enabled?0x01:0) | (bit2?0x04:0);
 	ret = smapi_write(SMAPI_SET_DISCHARGE_STATUS, cx, 0, 0, &msg);
 	if (ret)
-		printk(TP_NOTICE "cannot set force_discharge of battery %d to (%d,%d): %s\n", 
-		       bat, enabled, bit2, msg);
+		printk(TP_NOTICE "cannot set force_discharge of battery %d"
+		       " to (%d,%d): %s\n", bat, enabled, bit2, msg);
 	else
-		printk(TP_INFO "battery %d: set force_discharge to (%d,%d)\n", 
+		printk(TP_INFO
+		       "battery %d: set force_discharge to (%d,%d)\n", 
 		       bat, enabled, bit2);
 	return ret;
 }
@@ -545,7 +562,8 @@ static int set_cd_speed(int speed) {
 	}
 	ret = smapi_write(SMAPI_SET_CDROM_STATUS, cx, di, 0, &msg);
 	if (ret)
-		printk(TP_NOTICE "cannot set cd speed to %d: %s\n", speed, msg);
+		printk(TP_NOTICE "cannot set cd speed to %d: %s\n", 
+		       speed, msg);
 	else
 		printk(TP_INFO "cd speed set to level %d\n",
 		       speed);
@@ -559,7 +577,8 @@ static int set_cd_speed(int speed) {
  * proc file read/write routines 
  */
 
-struct bat_device_attribute { /* custom device attribute, adds battery number */
+/* Define custom device attribute struct which adds a battery number */
+struct bat_device_attribute {
 	struct device_attribute dev_attr;
 	int bat;
 };
@@ -574,7 +593,7 @@ static int show_tpc_bat_word(const char* fmt, u8 arg1610, int off,
 	u8 row[TP_CONTROLLER_ROW_LEN];
 	int bat = attr_get_bat(attr);
 	int ret;
-	if (!bat_has_extended_status(bat)) 
+	if (bat_has_extended_status(bat)!=1) 
 		return -ENXIO;
 	ret = tpc_read_row(arg1610, bat, row);
 	if (ret)
@@ -588,7 +607,7 @@ static int show_tpc_bat_str(u8 arg1610, int off, int maxlen,
 	int bat = attr_get_bat(attr);
 	u8 row[TP_CONTROLLER_ROW_LEN];
 	int ret;
-	if (!bat_has_extended_status(bat)) 
+	if (bat_has_extended_status(bat)!=1) 
 		return -ENXIO;
 	ret = tpc_read_row(arg1610, bat, row);
 	if (ret)
@@ -606,7 +625,7 @@ static int show_tpc_bat_power(u8 arg1610, int offV, int offA,
 	u8 row[TP_CONTROLLER_ROW_LEN];
 	int milliamp, millivolt, ret;
 	int bat = attr_get_bat(attr);
-	if (!bat_has_extended_status(bat)) 
+	if (bat_has_extended_status(bat)!=1) 
 		return -ENXIO;
 	ret = tpc_read_row(1, bat, row);
 	if (ret)
@@ -618,7 +637,7 @@ static int show_tpc_bat_power(u8 arg1610, int offV, int offA,
 
 
 
-static int start_charge_thresh_show(struct device *dev, 
+static int battery_start_charge_thresh_show(struct device *dev, 
                                     struct device_attribute *attr, char *buf)
 {
 	int thresh;
@@ -629,7 +648,7 @@ static int start_charge_thresh_show(struct device *dev,
 	return sprintf(buf, "%d\n", thresh);
 }
 
-static int stop_charge_thresh_show(struct device *dev, 
+static int battery_stop_charge_thresh_show(struct device *dev, 
                                    struct device_attribute *attr, char *buf)
 {
 	int thresh;
@@ -640,7 +659,7 @@ static int stop_charge_thresh_show(struct device *dev,
 	return sprintf(buf, "%d\n", thresh);
 }
 
-static int start_charge_thresh_store(struct device *dev, 
+static int battery_start_charge_thresh_store(struct device *dev, 
                                      struct device_attribute *attr, 
                                      const char *buf, size_t count)
 {
@@ -648,7 +667,8 @@ static int start_charge_thresh_store(struct device *dev,
 	int bat = attr_get_bat(attr);
 
 	if (sscanf(buf, "%d", &thresh)!=1 || thresh<1) {
-		printk(TP_ERR "start_charge_thresh: must be between %d and %d\n", 
+		printk(TP_ERR
+		       "start_charge_thresh: must be between %d and %d\n", 
 		       MIN_THRESH_START, MAX_THRESH_START);
 		return -EINVAL;
 	}
@@ -680,7 +700,7 @@ out:
 
 }
 
-static int stop_charge_thresh_store(struct device *dev,
+static int battery_stop_charge_thresh_store(struct device *dev,
                                     struct device_attribute *attr,
                                     const char *buf, size_t count)
 {
@@ -688,7 +708,8 @@ static int stop_charge_thresh_store(struct device *dev,
 	int bat = attr_get_bat(attr);
 
 	if (sscanf(buf, "%d", &thresh)!=1 || thresh>100) {
-		printk(TP_ERR "stop_charge_thresh: must be between %d and 100\n", 
+		printk(TP_ERR
+		       "stop_charge_thresh: must be between %d and 100\n", 
 		       MIN_THRESH_STOP);
 		return -EINVAL;
 	}
@@ -718,7 +739,7 @@ out:
 	return count;
 }
 
-static int inhibit_charge_show(struct device *dev, 
+static int battery_inhibit_charge_minutes_show(struct device *dev, 
                                struct device_attribute *attr, char *buf)
 {
 	int minutes;
@@ -729,7 +750,7 @@ static int inhibit_charge_show(struct device *dev,
 	return sprintf(buf, "%d\n", minutes);
 }
 
-static int inhibit_charge_store(struct device *dev, 
+static int battery_inhibit_charge_minutes_store(struct device *dev, 
                                 struct device_attribute *attr,
                                 const char *buf, size_t count)
 {
@@ -749,7 +770,7 @@ static int inhibit_charge_store(struct device *dev,
 	return count;
 }
 
-static int force_discharge_show(struct device *dev, 
+static int battery_force_discharge_show(struct device *dev, 
                                 struct device_attribute *attr, char *buf)
 {
 	int enabled;
@@ -760,7 +781,7 @@ static int force_discharge_show(struct device *dev,
 	return sprintf(buf, "%d\n", enabled);
 }
 
-static int force_discharge_store(struct device *dev,
+static int battery_force_discharge_store(struct device *dev,
                                  struct device_attribute *attr,
                                  const char *buf, size_t count)
 {
@@ -794,7 +815,7 @@ static int battery_state_show(
 	const char* msg;
 	int ret;
 	int bat = attr_get_bat(attr);
-	if (!bat_has_extended_status(bat)) 
+	if (bat_has_extended_status(bat)!=1) 
 		return sprintf(buf, "none\n");
 	ret = tpc_read_row(1, bat, row);
 	if (ret)
@@ -810,7 +831,7 @@ static int battery_state_show(
 static int ac_connected_show(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
-	int ret = is_battery_installed(-1);
+	int ret = is_battery_installed(0xFF);
 	if (ret<0)
 		return ret;
 	return sprintf(buf, "%d\n", ret);
@@ -923,7 +944,7 @@ static int battery_dump_show(
 		for (j=0; j<TP_CONTROLLER_ROW_LEN; j++)
 			p += sprintf(p, "%02x ", row[j]);
 		p += sprintf(p, "\n");
-		if (arg1610==1 && !bat_has_extended_status(bat))
+		if (arg1610==1 && bat_has_extended_status(bat)!=1)
 			goto done;
 		if ( (p-buf)>PAGE_SIZE-256 ) {
 			printk(TP_ERR "aps_dump_show: too much output!\n");
@@ -966,10 +987,11 @@ static int cd_speed_store(struct device *dev,
 
 
 /*********************************************************************
- * Driver model and power management
+ * Power management: the embedded controller forgets the battery 
+ * thresholds when the system is suspended to disk and unplugged from
+ * AC and battery, so we restore it upon resume.
  */
 
-/* The hardware forgets the battery thresholds on suspend-to-disk */
 static int saved_threshs[4] = {-1, -1, -1, -1};  /* -1 = don't know */
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,15)
@@ -1020,6 +1042,11 @@ static int tp_resume(struct device *dev, u32 level)
 	return 0;
 }
 
+
+/*********************************************************************
+ * Driver model
+ */
+
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,15)
 static struct platform_driver tp_driver = {
 	.suspend = tp_suspend,
@@ -1060,7 +1087,39 @@ static struct attribute_group tp_root_attribute_group = {
 	.attrs = tp_root_attributes
 };
 
-/* Attributes in /sys/devices/platform/smapi/BAT{0,1}/ */
+/* Attributes under /sys/devices/platform/smapi/BAT{0,1}/ :
+ * Every attribute needs to be defined (i.e., statically allocated) for
+ * each battery, and then referenced in the attribute list of each battery.
+ * We use preprocessor voodoo to avoid duplicating the list of attributes.
+ */
+
+/* This macro processes all attributes via the given "functions" args: */
+
+#define DO_BAT_ATTRS(_bat, _ATTR_RW, _ATTR_R) \
+	_ATTR_RW(_bat, start_charge_thresh) \
+	_ATTR_RW(_bat, stop_charge_thresh) \
+	_ATTR_RW(_bat, inhibit_charge_minutes) \
+	_ATTR_RW(_bat, force_discharge) \
+	_ATTR_R (_bat, installed) \
+	_ATTR_R (_bat, state) \
+	_ATTR_R (_bat, manufacturer) \
+	_ATTR_R (_bat, model) \
+	_ATTR_R (_bat, barcoding) \
+	_ATTR_R (_bat, chemistry) \
+	_ATTR_R (_bat, voltage) \
+	_ATTR_R (_bat, current_now) \
+	_ATTR_R (_bat, current_avg) \
+	_ATTR_R (_bat, power_now) \
+	_ATTR_R (_bat, power_avg) \
+	_ATTR_R (_bat, remaining_capacity) \
+	_ATTR_R (_bat, last_full_capacity) \
+	_ATTR_R (_bat, design_voltage) \
+	_ATTR_R (_bat, design_capacity) \
+	_ATTR_R (_bat, cycle_count) \
+	_ATTR_R (_bat, serial) \
+	_ATTR_R (_bat, dump)
+
+/* Now define the macro "functions" for DO_BAT_ATTRS: */
 
 #define BAT_DEVICE_ATTR(_name,_bat,_mode,_show,_store) \
 	struct bat_device_attribute dev_attr_##_name##_##_bat = { \
@@ -1068,88 +1127,37 @@ static struct attribute_group tp_root_attribute_group = {
 		.bat = _bat \
 	};
 
-#define BATS_DEVICE_ATTR(_name,_mode,_show,_store) \
-	BAT_DEVICE_ATTR(_name, 0, _mode, _show, _store); \
-	BAT_DEVICE_ATTR(_name, 1, _mode, _show, _store);
+#define DEF_BAT_ATTR_RW(_bat,_name) \
+	static BAT_DEVICE_ATTR(_name, _bat, 0644, \
+	                       battery_##_name##_show, \
+	                       battery_##_name##_store);
+
+#define DEF_BAT_ATTR_R(_bat,_name) \
+	static BAT_DEVICE_ATTR(_name, _bat, 0444, \
+	                       battery_##_name##_show, NULL);
+
+#define REF_BAT_ATTR(_bat,_name) \
+	&dev_attr_##_name##_##_bat.dev_attr.attr,
 
 
-static BATS_DEVICE_ATTR(start_charge_thresh, 0644, start_charge_thresh_show, start_charge_thresh_store);
-static BATS_DEVICE_ATTR(stop_charge_thresh, 0644, stop_charge_thresh_show, stop_charge_thresh_store);
-static BATS_DEVICE_ATTR(inhibit_charge_minutes, 0644, inhibit_charge_show, inhibit_charge_store);
-static BATS_DEVICE_ATTR(force_discharge, 0644, force_discharge_show, force_discharge_store);
-static BATS_DEVICE_ATTR(installed, 0644, battery_installed_show, NULL);
-static BATS_DEVICE_ATTR(state, 0644, battery_state_show, NULL);
-static BATS_DEVICE_ATTR(manufacturer, 0644, battery_manufacturer_show, NULL);
-static BATS_DEVICE_ATTR(model, 0644, battery_model_show, NULL);
-static BATS_DEVICE_ATTR(barcoding, 0644, battery_barcoding_show, NULL);
-static BATS_DEVICE_ATTR(chemistry, 0644, battery_chemistry_show, NULL);
-static BATS_DEVICE_ATTR(voltage, 0644, battery_voltage_show, NULL);
-static BATS_DEVICE_ATTR(current_now, 0644, battery_current_now_show, NULL);
-static BATS_DEVICE_ATTR(current_avg, 0644, battery_current_avg_show, NULL);
-static BATS_DEVICE_ATTR(power_now, 0644, battery_power_now_show, NULL);
-static BATS_DEVICE_ATTR(power_avg, 0644, battery_power_avg_show, NULL);
-static BATS_DEVICE_ATTR(remaining_capacity, 0644, battery_remaining_capacity_show, NULL);
-static BATS_DEVICE_ATTR(last_full_capacity, 0644, battery_last_full_capacity_show, NULL);
-static BATS_DEVICE_ATTR(design_voltage, 0644, battery_design_voltage_show, NULL);
-static BATS_DEVICE_ATTR(design_capacity, 0644, battery_design_capacity_show, NULL);
-static BATS_DEVICE_ATTR(cycle_count, 0644, battery_cycle_count_show, NULL);
-static BATS_DEVICE_ATTR(serial, 0644, battery_serial_show, NULL);
-static BATS_DEVICE_ATTR(dump, 0644, battery_dump_show, NULL);
+/* Battery 0 */
 
+DO_BAT_ATTRS(0, DEF_BAT_ATTR_RW, DEF_BAT_ATTR_R)
 static struct attribute *tp_bat0_attributes[] = {
-	&dev_attr_start_charge_thresh_0.dev_attr.attr,
-	&dev_attr_stop_charge_thresh_0.dev_attr.attr,
-	&dev_attr_inhibit_charge_minutes_0.dev_attr.attr,
-	&dev_attr_force_discharge_0.dev_attr.attr,
-	&dev_attr_installed_0.dev_attr.attr,
-	&dev_attr_state_0.dev_attr.attr,
-	&dev_attr_manufacturer_0.dev_attr.attr,
-	&dev_attr_model_0.dev_attr.attr,
-	&dev_attr_barcoding_0.dev_attr.attr,
-	&dev_attr_chemistry_0.dev_attr.attr,
-	&dev_attr_voltage_0.dev_attr.attr,
-	&dev_attr_current_now_0.dev_attr.attr,
-	&dev_attr_current_avg_0.dev_attr.attr,
-	&dev_attr_power_now_0.dev_attr.attr,
-	&dev_attr_power_avg_0.dev_attr.attr,
-	&dev_attr_remaining_capacity_0.dev_attr.attr,
-	&dev_attr_last_full_capacity_0.dev_attr.attr,
-	&dev_attr_design_capacity_0.dev_attr.attr,
-	&dev_attr_design_voltage_0.dev_attr.attr,
-	&dev_attr_cycle_count_0.dev_attr.attr,
-	&dev_attr_serial_0.dev_attr.attr,
-	&dev_attr_dump_0.dev_attr.attr,
+	DO_BAT_ATTRS(0, REF_BAT_ATTR, REF_BAT_ATTR)
 	NULL
 };
-static struct attribute *tp_bat1_attributes[] = {
-	&dev_attr_start_charge_thresh_1.dev_attr.attr,
-	&dev_attr_stop_charge_thresh_1.dev_attr.attr,
-	&dev_attr_inhibit_charge_minutes_1.dev_attr.attr,
-	&dev_attr_force_discharge_1.dev_attr.attr,
-	&dev_attr_installed_1.dev_attr.attr,
-	&dev_attr_state_1.dev_attr.attr,
-	&dev_attr_manufacturer_1.dev_attr.attr,
-	&dev_attr_barcoding_1.dev_attr.attr,
-	&dev_attr_model_1.dev_attr.attr,
-	&dev_attr_chemistry_1.dev_attr.attr,
-	&dev_attr_voltage_1.dev_attr.attr,
-	&dev_attr_current_now_1.dev_attr.attr,
-	&dev_attr_current_avg_1.dev_attr.attr,
-	&dev_attr_power_now_1.dev_attr.attr,
-	&dev_attr_power_avg_1.dev_attr.attr,
-	&dev_attr_remaining_capacity_1.dev_attr.attr,
-	&dev_attr_last_full_capacity_1.dev_attr.attr,
-	&dev_attr_design_capacity_1.dev_attr.attr,
-	&dev_attr_design_voltage_1.dev_attr.attr,
-	&dev_attr_cycle_count_1.dev_attr.attr,
-	&dev_attr_serial_1.dev_attr.attr,
-	&dev_attr_dump_1.dev_attr.attr,
-	NULL
-};
-
 static struct attribute_group tp_bat0_attribute_group = {
 	.name  = "BAT0",
 	.attrs = tp_bat0_attributes
+};
+
+/* Battery 1 */
+
+DO_BAT_ATTRS(1, DEF_BAT_ATTR_RW, DEF_BAT_ATTR_R)
+static struct attribute *tp_bat1_attributes[] = {
+	DO_BAT_ATTRS(1, REF_BAT_ATTR, REF_BAT_ATTR)
+	NULL
 };
 static struct attribute_group tp_bat1_attribute_group = {
 	.name  = "BAT1",
@@ -1157,6 +1165,7 @@ static struct attribute_group tp_bat1_attribute_group = {
 };
 
 /* List of attribute groups */
+
 static struct attribute_group *attr_groups[] = {
 	&tp_root_attribute_group,
 	&tp_bat0_attribute_group,
@@ -1170,12 +1179,11 @@ static struct attribute_group *attr_groups[] = {
  */
 
 static struct platform_device *pdev;
-static struct attribute_group **next_attr_group; /* which is registered? */
+static struct attribute_group **next_attr_group; /* next to register */
 
 static int __init tp_init(void)
 {
 	int ret;
-
 	printk(TP_INFO "tp_smapi " TP_VERSION " loading...\n");
 
 	ret = find_smapi_port();
@@ -1232,7 +1240,7 @@ static int __init tp_init(void)
 	return 0;
 
 err_attr:
-	while (--next_attr_group>=attr_groups)
+	while (--next_attr_group >= attr_groups)
 		sysfs_remove_group(&pdev->dev.kobj, *next_attr_group);
 	platform_device_unregister(pdev);
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,15)
@@ -1256,7 +1264,7 @@ err:
 
 static void __exit tp_exit(void)
 {
-	while (next_attr_group && --next_attr_group>=attr_groups)
+	while (next_attr_group && --next_attr_group >= attr_groups)
 		sysfs_remove_group(&pdev->dev.kobj, *next_attr_group);
 	platform_device_unregister(pdev);
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,15)

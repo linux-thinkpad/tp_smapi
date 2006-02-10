@@ -1,0 +1,51 @@
+--- a/diff/hdaps-2.6.14.diff	2006-01-01 00:00:00.000000000 +0000
++++ b/diff/hdaps-2.6.14.diff	2006-01-01 00:00:00.000000000 +0000
+@@ -360,1 +360,1 @@
+-+static int hdaps_suspend(struct platform_device *dev, pm_message_t state)
+++static int hdaps_suspend(struct device *dev, pm_message_t state, uint32_t level)
+@@ -372,1 +372,1 @@
+- static int hdaps_resume(struct platform_device *dev)
++ static int hdaps_resume(struct device *dev, u32 level)
+@@ -374,6 +374,6 @@
+- static struct platform_driver hdaps_driver = {
+- 	.probe = hdaps_probe,
+-+	.suspend = hdaps_suspend,
+- 	.resume = hdaps_resume,
+- 	.driver	= {
+- 		.name = "hdaps",
++ 	.owner = THIS_MODULE,
++ 	.probe = hdaps_probe,
+++	.suspend = hdaps_suspend,
++ 	.resume = hdaps_resume
++ };
++ 
+@@ -382,3 +382,3 @@
+--	input_report_abs(hdaps_idev, ABS_X, x - rest_x);
+--	input_report_abs(hdaps_idev, ABS_Y, y - rest_y);
+--	input_sync(hdaps_idev);
++-	input_report_abs(&hdaps_idev, ABS_X, x - rest_x);
++-	input_report_abs(&hdaps_idev, ABS_Y, y - rest_y);
++-	input_sync(&hdaps_idev);
+@@ -386,3 +386,3 @@
+-+	input_report_abs(hdaps_idev, ABS_X, pos_x - rest_x);
+-+	input_report_abs(hdaps_idev, ABS_Y, pos_y - rest_y);
+-+	input_sync(hdaps_idev);
+++	input_report_abs(&hdaps_idev, ABS_X, pos_x - rest_x);
+++	input_report_abs(&hdaps_idev, ABS_Y, pos_y - rest_y);
+++	input_sync(&hdaps_idev);
+@@ -413,3 +413,3 @@
+ -
+- 	ret = platform_driver_register(&hdaps_driver);
++ 	ret = driver_register(&hdaps_driver);
+  	if (ret)
+@@ -430,3 +430,3 @@
+  out_driver:
+- 	platform_driver_unregister(&hdaps_driver);
++ 	driver_unregister(&hdaps_driver);
+ -out_region:
+@@ -437,3 +437,3 @@
+  	platform_device_unregister(pdev);
+- 	platform_driver_unregister(&hdaps_driver);
++ 	driver_unregister(&hdaps_driver);
+ -	release_region(HDAPS_LOW_PORT, HDAPS_NR_PORTS);
+

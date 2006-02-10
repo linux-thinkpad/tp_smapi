@@ -1,5 +1,5 @@
---- generic/tp_smapi.c	2006-01-07 20:40:10.000000000 +0200
-+++ 2.6.15/tp_smapi.c	2006-01-07 20:41:25.000000000 +0200
+--- generic/tp_smapi.c	2006-01-01 00:00:00.000000000 +0000
++++ 2.6.15/tp_smapi.c	2006-01-01 00:00:00.000000000 +0000
 @@ -40,18 +40,9 @@
  #include <linux/delay.h>
  #include <linux/version.h>
@@ -21,7 +21,7 @@
  
  #define TP_DESC "ThinkPad SMAPI Support"
  #define TP_DIR "smapi"
-@@ -1021,54 +1012,35 @@
+@@ -1021,50 +1012,32 @@
  /* The hardware forgets the battery threshols on suspend-to-disk */
  static int saved_threshs[4] = {-1, -1, -1, -1};  /* -1 = don't know */
  
@@ -72,6 +72,7 @@
 -#endif
  	return 0;
  }
+@@ -1065,4 +1064,3 @@
  
 -#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,15)
  static struct platform_driver tp_driver = {

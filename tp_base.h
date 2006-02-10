@@ -29,31 +29,50 @@
 
 #ifdef __KERNEL__
 
-#define TP_CONTROLLER_BASE_PORT 0x1600
-#define TP_CONTROLLER_NUM_PORTS 0x20
 #define TP_CONTROLLER_ROW_LEN 16
 
-/* Get exclusive lock for accesing the controller. */
+/* tp_controller_lock:
+ * Get exclusive lock for accesing the controller. 
+ */
 extern void tp_controller_lock(void);
 
-/* Likewise but non-blocking. Returns 0 if acquired lock. */
+/* tp_controller_trylock:
+ * Likewise, but non-blocking. Returns 0 if acquired lock. 
+ */
 extern int tp_controller_trylock(void);
 
-/* Release lock. */
+/* tp_controller_unlock:
+ * Release lock. 
+ */
 extern void tp_controller_unlock(void);
 
-/* Read a data row from the controller. Caller must hold controller lock. */
+/* tp_controller_read_row:
+ * Read a data row from the controller, fetching and retrying if needed.
+ * Returns -EBUSY on transient error and -EIO on abnormal condition.
+ * Caller must hold controller lock. 
+ */
 extern int tp_controller_read_row(u8 arg1610, u8 arg161F, u8* buf);
 
-/* Prefetch data row from the controller. A subsequent call to
- * tp_controller_read_row() with the same arguments will be faster
- * (if it happens neither too soon nor too late).
+/* tp_controller_try_read_row:
+ * Try read a prefetched row from the controller. Don't fetch or retry.
+ * Returns -EBUSY is data not ready and -ENODATA if row not prefetched.
+ * Caller must hold controller lock. 
+ */
+extern int tp_controller_try_read_row(u8 arg1610, u8 arg161F, u8* buf);
+
+/* tp_controller_prefetch_row:
+ * Prefetch data row from the controller. A subsequent call to
+ * tp_controller_read_row() with the same arguments will be faster,
+ * and a subsequent call to tp_controller_try_read_row stands a 
+ * good chance of succeeding if done neither too soon nor too late.
+ * Returns -EBUSY on transient error and -EIO on abnormal condition.
  * Caller must hold controller lock.
  */
 extern int tp_controller_prefetch_row(u8 arg1610, u8 arg161F);
 
-/* Invalidate the prefetched controller data.
- * Must be called before unclocking by any code that accesses the controller
+/* tp_controller_invalidate:
+ * Invalidate the prefetched controller data.
+ * Must be called before unlocking by any code that accesses the controller
  * ports directly.
  */
 extern void tp_controller_invalidate(void);

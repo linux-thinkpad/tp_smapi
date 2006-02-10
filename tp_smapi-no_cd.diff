@@ -10,7 +10,7 @@
  
  /*** SMAPI interface ***/
  
-@@ -545,52 +542,6 @@
+@@ -545,53 +542,6 @@
  	return 1;
  }
  
@@ -52,7 +52,8 @@
 -	}
 -	ret = smapi_write(SMAPI_SET_CDROM_STATUS, cx, di, 0, &msg);
 -	if (ret)
--		printk(TP_NOTICE "cannot set cd speed to %d: %s\n", speed, msg);
+-		printk(TP_NOTICE "cannot set cd speed to %d: %s\n", 
+-		       speed, msg);
 -	else
 -		printk(TP_INFO "cd speed set to level %d\n",
 -		       speed);

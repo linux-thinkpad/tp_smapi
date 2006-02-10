@@ -1,5 +1,34 @@
 Change history for tp_smapi:
 
+0.18  2006-04-01
+----------------
+- Solved embedded controller lockups with HDAPS=1 (see hdaps comments below).
+- Added new function tp_controller_try_read_row() to tp_base.
+- Added extra status checks in tp_base, to catch abnormal conditions earlier.
+- Restructured several functions in tp_base for clarity and reusability.
+- Restructured tp_smapi attribute registration code using fancy macros, to 
+  remove redundancy.
+- Reduced prefetch delay and maximum retries in tp_base.
+- Now locks tp_controller when making SMAPI call (just in case).
+- Makefile change to fix compilation in Debian.
+- Minor cleanups and added comments in tp_smapi.c.
+- Major changes to hdaps patch:
+  - Whenever we read data from the controller, parse all of it and
+    remember the values in global vars.
+  - Simplified the device model *_show functions, via the above change.
+  - If the mousedev poll timer handler experiences a transient fault, use
+    use last saved data from the global vars.
+  - Handle delayed calibration at first opportunity, not just mousedev polls.
+  - Disable mousedev poll timer when suspending, to prevent readouts before
+    the resume code re-initializes the sensor.
+  - Don't accept initial status 0x00, it was probably an artifact of 
+    the premature mousepoll invocation.
+  - When doing a sensor readout in mousedev poll, avoid time-consuming
+    retries and fetches, to minimize time in softirq. This effectively 
+    exorcises an embedded controller lockup Heisenbug. There may still 
+    a nonzero probability of lockup, but now it's not worse than the 
+    vanilla hdaps (since they do essentially the same).
+
 0.17  2006-02-10
 ----------------
 - Fixed off-by-one bugs in charge threshold handling + cleanup

@@ -1,5 +1,5 @@
-ifeq ($(KERNELRELEASE),)
-# This runs in normal Makefile context:
+ifndef TP_MODULES
+# This part runs as a normal, top-level Makefile:
 
 KVER        := $(shell uname -r)
 KSRC        := /lib/modules/$(KVER)/build
@@ -11,14 +11,14 @@ TP_MODULES  := tp_base.o tp_smapi.o
 
 ifeq ($(HDAPS),1)
 TP_MODULES  += hdaps.o
-LOAD_HDAPS := insmod ./hdaps.ko
+LOAD_HDAPS  := insmod ./hdaps.ko
 else
-LOAD_HDAPS := :
+LOAD_HDAPS  := :
 endif
 
 # kernel >= 2.6.15?
 ifeq ($(shell [ -f $(KSRC)/include/linux/platform_device.h ] && echo 1),1)
-  HDAPS_DIFF    := diff/hdaps-2.6.15.diff
+  HDAPS_DIFF    := diff/hdaps.diff
   TP_SMAPI_DIFF := $(PWD)/diff/tp_smapi-clean-2.6.15.diff
 else
   HDAPS_DIFF    := diff/hdaps-2.6.14.diff
@@ -68,12 +68,12 @@ endif
 hdaps.c: $(KSRC)/drivers/hwmon/hdaps.c $(HDAPS_DIFF)
 	patch -d $(KSRC) -i $(PWD)/$(HDAPS_DIFF) -p1 -o $(PWD)/hdaps.c
 
-diff/hdaps-2.6.14.diff: diff/hdaps-2.6.15.diff diff/hdaps-2.6.14.diff.diff
-	cp diff/hdaps-2.6.15.diff diff/hdaps-2.6.14.diff
+diff/hdaps-2.6.14.diff: diff/hdaps.diff diff/hdaps-2.6.14.diff.diff
+	cp diff/hdaps.diff diff/hdaps-2.6.14.diff
 	patch -i diff/hdaps-2.6.14.diff.diff -p1
 
 #####################################################################
-# Generate a kernel patch
+# Generate a stand-alone kernel patch
 
 TP_VER := ${shell sed -ne 's/^\#define TP_VERSION \"\(.*\)\"/\1/gp' tp_smapi.c}
 ORG    := linux-$(KVER)-orig
@@ -95,7 +95,7 @@ patch: hdaps.c
 	cp -r $(ORG) $(NEW) &&\
 	\
 	if [ "$(BASE_IN_PATCH)" == 1 ]; then \
-	patch -s -d $(NEW) -i $(PWD)/diff/Kconfig-tp_base.diff -p1 &&\
+	patch --no-backup-if-mismatch -s -d $(NEW) -i $(PWD)/diff/Kconfig-tp_base.diff -p1 &&\
 	cp $(PWD)/tp_base.c $(NEW)/$(TP_DIR)/tp_base.c &&\
 	cp $(PWD)/tp_base.h $(NEW)/$(IDIR)/tp_base.h &&\
 	cp $(PWD)/hdaps.c $(NEW)/drivers/hwmon/ &&\
@@ -122,9 +122,9 @@ patch: hdaps.c
 
 else
 #####################################################################
-# This run in kernel Makefile context:
+# This part runs as a submake in kernel Makefile context:
 
 CFLAGS := $(CFLAGS) -I$(PWD)/include
-obj-m := $(TP_MODULES)
+obj-m  := $(TP_MODULES)
 
 endif
