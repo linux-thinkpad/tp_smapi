@@ -1,5 +1,12 @@
 --- a/diff/hdaps-2.6.14.diff	2006-01-01 00:00:00.000000000 +0000
 +++ b/diff/hdaps-2.6.14.diff	2006-01-01 00:00:00.000000000 +0000
+@@ -3,1 +3,1 @@
+-@@ -33,74 +33,61 @@
++@@ -33,72 +33,59 @@
+@@ -53,1 +53,0 @@
+- #define HDAPS_INPUT_FLAT	4
+@@ -56,1 +56,0 @@
+- static struct input_dev *hdaps_idev;
 @@ -360,1 +360,1 @@
 -+static int hdaps_suspend(struct platform_device *dev, pm_message_t state)
 ++static int hdaps_suspend(struct device *dev, pm_message_t state, uint32_t level)

@@ -1,5 +1,19 @@
 Change history for tp_smapi:
 
+0.19  2006-04-08
+----------------
+- Added new battery status attributes:
+  /sys/devices/platform/smapi/BAT?/first_use_date
+  /sys/devices/platform/smapi/BAT?/manufacture_date
+- Bugfix in tp_base embedded controller readout 
+  (missing prefetch invalidation). This apparently solves remnants of the
+  the embedded-controller-lockup problem.
+- "make load" now demands "HDAPS=1" if the hdaps module is loaded.
+- hdaps driver patch:
+  - Remember keyboard/mouse activity for 0.1sec, so that all applications
+    get a chance to read it (the hardware resets its activity flag
+    when it's read).
+
 0.18  2006-04-01
 ----------------
 - Solved embedded controller lockups with HDAPS=1 (see hdaps comments below).

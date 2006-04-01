@@ -1,10 +1,11 @@
 --- a/drivers/hwmon/hdaps.c	2006-01-01 00:00:00.000000000 +0000
 +++ b/drivers/hwmon/hdaps.c	2006-01-01 00:00:00.000000000 +0000
-@@ -33,30 +33,29 @@
+@@ -33,74 +33,61 @@
  #include <linux/module.h>
  #include <linux/timer.h>
  #include <linux/dmi.h>
 +#include <linux/tp_base.h>
++#include <linux/jiffies.h>
  #include <asm/io.h>
  
 -#define HDAPS_LOW_PORT		0x1600	/* first port used by hdaps */
@@ -33,8 +34,8 @@
  
  #define KEYBD_MASK		0x20	/* set if keyboard activity */
  #define MOUSE_MASK		0x40	/* set if mouse activity */
- #define KEYBD_ISSET(n)		(!! (n & KEYBD_MASK))	/* keyboard used? */
- #define MOUSE_ISSET(n)		(!! (n & MOUSE_MASK))	/* mouse used? */
+-#define KEYBD_ISSET(n)		(!! (n & KEYBD_MASK))	/* keyboard used? */
+-#define MOUSE_ISSET(n)		(!! (n & MOUSE_MASK))	/* mouse used? */
  
 -#define INIT_TIMEOUT_MSECS	4000	/* wait up to 4s for device init ... */
 -#define INIT_WAIT_MSECS		200	/* ... in 200ms increments */
@@ -46,22 +47,20 @@
  
  #define HDAPS_POLL_PERIOD	(HZ/20)	/* poll for input every 1/20s */
  #define HDAPS_INPUT_FUZZ	4	/* input event threshold */
-@@ -66,41 +65,26 @@ static struct timer_list hdaps_timer;
+ #define HDAPS_INPUT_FLAT	4
+ 
++#define KMACT_REMEMBER_PERIOD   (HDAPS_POLL_PERIOD*2) /* k/m persistance */
++
+ static struct timer_list hdaps_timer;
  static struct platform_device *pdev;
  static struct input_dev *hdaps_idev;
  static unsigned int hdaps_invert;
 -static u8 km_activity;
 -static int rest_x;
 -static int rest_y;
-+static int needs_calibration = 0;
- 
+-
 -static DECLARE_MUTEX(hdaps_sem);
-+/* Latest state read */
-+static int pos_x, pos_y;   /* position */
-+static int var_x, var_y;   /* variance (what is this?) */
-+static int rest_x, rest_y; /* calibrated rest position */
-+static u8 km_activity;     /* keyboard/mouse activity */
-+static u8 temp1, temp2;    /* temperatures */
++static int needs_calibration = 0;
  
 -/*
 - * __get_latch - Get the value from a given port.  Callers must hold hdaps_sem.
@@ -81,6 +80,15 @@
 -		return 0;
 -	return -EINVAL;
 -}
++/* Latest state read */
++static int pos_x, pos_y;   /* position */
++static int var_x, var_y;   /* variance (what is this?) */
++static int rest_x, rest_y; /* calibrated rest position */
++static u8 temp1, temp2;    /* temperatures */
++
++/* Last time we saw keyboard and mouse activity */
++u64 last_keyboard_jiffies = INITIAL_JIFFIES;
++u64 last_mouse_jiffies = INITIAL_JIFFIES;
  
  /*
   * __wait_latch - Wait up to 100us for a port latch to get a certain value,
@@ -98,7 +106,7 @@
  			return 0;
  		udelay(5);
  	}
-@@ -108,82 +92,54 @@ static int __wait_latch(u16 port, u8 val
+@@ -108,82 +95,63 @@ static int __wait_latch(u16 port, u8 val
  	return -EIO;
  }
  
@@ -207,7 +215,16 @@
 -	if (hdaps_invert) {
 -		*x = -*x;
 -		*y = -*y;
-+	km_activity = row[HDAPS_IDX_KMACT];
++	/* Keyboard and mouse activity status is cleared as soon as it's read,
++	 * so applications will eat each other's events. Thus we remember any
++	 * event for KMACT_REMEMBER_PERIOD jiffies.
++	 */
++	if (row[HDAPS_IDX_KMACT] & KEYBD_MASK)
++		last_keyboard_jiffies = get_jiffies_64();
++	if (row[HDAPS_IDX_KMACT] & MOUSE_MASK)
++		last_mouse_jiffies = get_jiffies_64();
++
++	/* Temperatures */
 +	temp1 = row[HDAPS_IDX_TEMP1];
 +	temp2 = row[HDAPS_IDX_TEMP2];
 +
@@ -218,7 +235,7 @@
  	}
  
  	return 0;
-@@ -192,16 +148,23 @@ static int __hdaps_read_pair(unsigned in
+@@ -192,16 +160,23 @@ static int __hdaps_read_pair(unsigned in
  /*
   * hdaps_read_pair - reads the values from a pair of ports, placing the values
   * in the given pointers.  Returns zero on success.  Can sleep.
@@ -249,7 +266,7 @@
  	return ret;
  }
  
-@@ -211,30 +174,28 @@ static int hdaps_read_pair(unsigned int 
+@@ -211,30 +186,28 @@ static int hdaps_read_pair(unsigned int 
   */
  static int hdaps_device_init(void)
  {
@@ -262,8 +279,7 @@
  
  	outb(0x13, 0x1610);
  	outb(0x01, 0x161f);
--	if (__wait_latch(0x161f, 0x00))
-+	if (__wait_latch(0x161f, 0x00)) 
+ 	if (__wait_latch(0x161f, 0x00))
  		goto out;
  
 -	/*
@@ -293,7 +309,7 @@
  
  	outb(0x17, 0x1610);
  	outb(0x81, 0x1611);
-@@ -259,27 +220,18 @@ static int hdaps_device_init(void)
+@@ -259,27 +232,18 @@ static int hdaps_device_init(void)
  	outb(0x01, 0x161f);
  	if (__wait_latch(0x161f, 0x00))
  		goto out;
@@ -330,7 +346,7 @@
  	return ret;
  }
  
-@@ -298,6 +250,13 @@ static int hdaps_probe(struct platform_d
+@@ -298,6 +262,13 @@ static int hdaps_probe(struct platform_d
  	return 0;
  }
  
@@ -344,7 +360,7 @@
  static int hdaps_resume(struct platform_device *dev)
  {
  	return hdaps_device_init();
-@@ -305,6 +264,7 @@ static int hdaps_resume(struct platform_
+@@ -305,6 +276,7 @@ static int hdaps_resume(struct platform_
  
  static struct platform_driver hdaps_driver = {
  	.probe = hdaps_probe,
@@ -352,7 +368,7 @@
  	.resume = hdaps_resume,
  	.driver	= {
  		.name = "hdaps",
-@@ -313,34 +273,43 @@ static struct platform_driver hdaps_driv
+@@ -313,34 +285,43 @@ static struct platform_driver hdaps_driv
  };
  
  /*
@@ -410,7 +426,7 @@
  }
  
  
-@@ -349,57 +318,46 @@ out:
+@@ -349,65 +330,55 @@ out:
  static ssize_t hdaps_position_show(struct device *dev,
  				   struct device_attribute *attr, char *buf)
  {
@@ -475,23 +491,24 @@
  					    struct device_attribute *attr,
  					    char *buf)
  {
-+	int ret = hdaps_update();
-+	if (ret)
-+		return ret;
- 	return sprintf(buf, "%u\n", KEYBD_ISSET(km_activity));
+-	return sprintf(buf, "%u\n", KEYBD_ISSET(km_activity));
++	/* Time-insensitive, so hdaps_mousedev_poll ensure updates. */
++	return sprintf(buf, "%u\n", 
++	   get_jiffies_64() < last_keyboard_jiffies + KMACT_REMEMBER_PERIOD);
  }
  
-@@ -407,6 +365,9 @@ static ssize_t hdaps_mouse_activity_show
+ static ssize_t hdaps_mouse_activity_show(struct device *dev,
  					 struct device_attribute *attr,
  					 char *buf)
  {
-+	int ret = hdaps_update();
-+	if (ret)
-+		return ret;
- 	return sprintf(buf, "%u\n", MOUSE_ISSET(km_activity));
+-	return sprintf(buf, "%u\n", MOUSE_ISSET(km_activity));
++	/* Time-insensitive, so hdaps_mousedev_poll ensure updates. */
++	return sprintf(buf, "%u\n", 
++	   get_jiffies_64() < last_mouse_jiffies + KMACT_REMEMBER_PERIOD);
  }
  
-@@ -420,10 +381,7 @@ static ssize_t hdaps_calibrate_store(str
+ static ssize_t hdaps_calibrate_show(struct device *dev,
+@@ -420,10 +391,7 @@ static ssize_t hdaps_calibrate_store(str
  				     struct device_attribute *attr,
  				     const char *buf, size_t count)
  {
@@ -502,7 +519,7 @@
  	return count;
  }
  
-@@ -536,14 +494,9 @@ static int __init hdaps_init(void)
+@@ -536,14 +504,9 @@ static int __init hdaps_init(void)
  		goto out;
  	}
  
@@ -518,7 +535,7 @@
  
  	pdev = platform_device_register_simple("hdaps", -1, NULL, 0);
  	if (IS_ERR(pdev)) {
-@@ -561,8 +514,8 @@ static int __init hdaps_init(void)
+@@ -561,8 +524,8 @@ static int __init hdaps_init(void)
  		goto out_group;
  	}
  
@@ -529,7 +546,7 @@
  
  	/* initialize the input class */
  	hdaps_idev->name = "hdaps";
-@@ -590,8 +543,6 @@ out_device:
+@@ -590,8 +553,6 @@ out_device:
  	platform_device_unregister(pdev);
  out_driver:
  	platform_driver_unregister(&hdaps_driver);
@@ -538,7 +555,7 @@
  out:
  	printk(KERN_WARNING "hdaps: driver init failed (ret=%d)!\n", ret);
  	return ret;
-@@ -604,7 +555,6 @@ static void __exit hdaps_exit(void)
+@@ -604,7 +565,6 @@ static void __exit hdaps_exit(void)
  	sysfs_remove_group(&pdev->dev.kobj, &hdaps_attribute_group);
  	platform_device_unregister(pdev);
  	platform_driver_unregister(&hdaps_driver);

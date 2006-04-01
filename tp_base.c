@@ -35,7 +35,7 @@
 
 MODULE_AUTHOR("Shem Multinymous");
 MODULE_DESCRIPTION("ThinkPad hardware access coordination");
-MODULE_VERSION("0.02");
+MODULE_VERSION("0.03");
 MODULE_LICENSE("GPL");
 
 #define TPC_BASE_PORT 0x1600
@@ -139,7 +139,6 @@ static int tp_controller_is_row_fetched(u8 arg1610, u8 arg161F) {
 /* Read a row from the embedded controller */
 int tp_controller_read_row(u8 arg1610, u8 arg161F, u8* buf) {
 	int retries, ret;
-
 	if (tp_controller_is_row_fetched(arg1610,arg161F))
 		goto read_row; /* already requested */
 
@@ -155,7 +154,7 @@ int tp_controller_read_row(u8 arg1610, u8 arg161F, u8* buf) {
 	printk(KERN_ERR 
 	       "thinkpad controller read(%#x,%#x): failed requesting row\n",
 	       (int)arg1610, (int)arg161F);
-	return ret;
+	goto out;
 
 read_row:
 	/* Read the row's data */

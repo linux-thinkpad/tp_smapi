@@ -1,4 +1,4 @@
-IBM ThinkPad SMAPI Driver v0.18
+IBM ThinkPad SMAPI Driver v0.19
 Author:  Shem Multinymous <multinymous@gmail.com>
 Project: http://sourceforge.net/projects/tpctl
 Wiki:    http://thinkwiki.org/wiki/tp_smapi
@@ -103,9 +103,11 @@ Misc read-only battery status (see note about HDAPS below):
 # cat /sys/devices/platform/smapi/BAT0/design_voltage
 # cat /sys/devices/platform/smapi/BAT0/manufacturer
 # cat /sys/devices/platform/smapi/BAT0/model
-# cat /sys/devices/platform/smapi/BAT0/serial
 # cat /sys/devices/platform/smapi/BAT0/barcoding
 # cat /sys/devices/platform/smapi/BAT0/chemistry
+# cat /sys/devices/platform/smapi/BAT0/serial
+# cat /sys/devices/platform/smapi/BAT0/manufacture_date
+# cat /sys/devices/platform/smapi/BAT0/first_use_date
 # cat /sys/devices/platform/smapi/ac_connected
 
 The raw status data, including some fields not in the above (in case

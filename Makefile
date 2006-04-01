@@ -25,7 +25,7 @@ else
   TP_SMAPI_DIFF := /dev/null
 endif
 
-.PHONY: default clean modules load unload install patch
+.PHONY: default clean modules load unload install patch check_hdaps
 export TP_MODULES
 
 #####################################################################
@@ -46,7 +46,7 @@ clean:
 	rm -f tp_smapi-*-for-*.patch 
 	rm -fr .tmp_versions
 
-load: unload modules
+load: check_hdaps unload modules
 	{ insmod ./tp_base.ko &&\
 	  insmod ./tp_smapi.ko debug=1 &&\
 	  $(LOAD_HDAPS); }; :
@@ -56,6 +56,13 @@ unload:
 	if lsmod | grep -q '^hdaps '; then rmmod hdaps; fi
 	if lsmod | grep -q '^tp_smapi '; then rmmod tp_smapi; fi
 	if lsmod | grep -q '^tp_base '; then rmmod tp_base; fi
+
+check_hdaps:
+ifneq ($(HDAPS),1)
+	@if lsmod | grep -q '^hdaps '; then \
+	echo 'The hdaps driver is loaded. Use "make HDAPS=1 ..." to'\
+	'patch hdaps for compatibility with tp_smapi.'; exit 1; fi
+endif
 
 install: modules
 	rm -f $(MOD_DIR)/$(TP_DIR)/{tp_base,tp_smapi}.ko

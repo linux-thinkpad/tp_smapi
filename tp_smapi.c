@@ -31,7 +31,7 @@
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#define TP_VERSION "0.18"
+#define TP_VERSION "0.19"
 
 #include <linux/kernel.h>
 #include <linux/module.h>
@@ -583,6 +583,8 @@ struct bat_device_attribute {
 	int bat;
 };
 
+/* Functions to parse and format controller readouts */
+
 static int attr_get_bat(struct device_attribute *attr) {
 	return container_of(attr, struct bat_device_attribute, dev_attr)->bat;
 }
@@ -618,7 +620,6 @@ static int show_tpc_bat_str(u8 arg1610, int off, int maxlen,
 	return strlen(buf);
 }
 
-
 static int show_tpc_bat_power(u8 arg1610, int offV, int offA,
                               struct device_attribute *attr, char *buf)
 {
@@ -635,7 +636,31 @@ static int show_tpc_bat_power(u8 arg1610, int offV, int offA,
 	return sprintf(buf, "%d mW\n", milliamp*millivolt/1000);
 }
 
+static int show_tpc_bat_date(u8 arg1610, int off,
+                             struct device_attribute *attr, char *buf)
+{
+	u8 row[TP_CONTROLLER_ROW_LEN];
+	u16 v;
+	int ret;
+	int day, month, year;
+	int bat = attr_get_bat(attr);
+	if (bat_has_extended_status(bat)!=1) 
+		return -ENXIO;
+	ret = tpc_read_row(arg1610, bat, row);
+	if (ret)
+		return ret;
 
+	/* Decode bit-packed: v = day | (month<<5) | ((year-1980)<<9) */
+	v = *(u16*)(row+off);
+	day = v & 0x1F;
+	month = (v >> 5) & 0xF;
+	year = (v >> 9) + 1980;
+	
+	return sprintf(buf, "%04d-%02d-%02d\n", year, month, day);
+}
+
+
+/* The actual attribute show/store functions */
 
 static int battery_start_charge_thresh_show(struct device *dev, 
                                     struct device_attribute *attr, char *buf)
@@ -927,6 +952,18 @@ static int battery_serial_show(
 	return show_tpc_bat_word("%u\n", 3, 10, attr, buf);
 }
 
+static int battery_manufacture_date_show(
+	struct device *dev, struct device_attribute *attr, char *buf)
+{
+	return show_tpc_bat_date(3, 8, attr, buf);
+}
+
+static int battery_first_use_date_show(
+	struct device *dev, struct device_attribute *attr, char *buf)
+{
+	return show_tpc_bat_date(8, 2, attr, buf);
+}
+
 static int battery_dump_show(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
@@ -1117,6 +1154,8 @@ static struct attribute_group tp_root_attribute_group = {
 	_ATTR_R (_bat, design_capacity) \
 	_ATTR_R (_bat, cycle_count) \
 	_ATTR_R (_bat, serial) \
+	_ATTR_R (_bat, manufacture_date) \
+	_ATTR_R (_bat, first_use_date) \
 	_ATTR_R (_bat, dump)
 
 /* Now define the macro "functions" for DO_BAT_ATTRS: */
