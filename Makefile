@@ -16,13 +16,8 @@ else
 LOAD_HDAPS  := :
 endif
 
-# kernel >= 2.6.15?
-ifeq ($(shell [ -f $(KSRC)/include/linux/platform_device.h ] && echo 1),1)
-  HDAPS_DIFF    := diff/hdaps.diff
-  TP_SMAPI_DIFF := $(PWD)/diff/tp_smapi-clean-2.6.15.diff
-else
-  HDAPS_DIFF    := diff/hdaps-2.6.14.diff
-  TP_SMAPI_DIFF := /dev/null
+ifneq ($(shell [ -f $(KSRC)/include/linux/platform_device.h ] && echo 1),1)
+	$(error This driver requires kernel 2.6.15 or newer.)
 endif
 
 .PHONY: default clean modules load unload install patch check_hdaps
@@ -38,7 +33,6 @@ modules: $(KSRC) $(patsubst %.o,%.c,$(TP_MODULES))
 	$(MAKE) -C $(KSRC) M=$(PWD) modules
 
 clean:
-	rm -f hdaps.c diff/hdaps-2.6.14.diff
 	rm -f tp_smapi.mod.* tp_smapi.o tp_smapi.ko .tp_smapi.*.cmd
 	rm -f tp_base.mod.* tp_base.o tp_base.ko .tp_base.*.cmd
 	rm -f hdaps.mod.* hdaps.o hdaps.ko .hdaps.*.cmd
@@ -61,7 +55,8 @@ check_hdaps:
 ifneq ($(HDAPS),1)
 	@if lsmod | grep -q '^hdaps '; then \
 	echo 'The hdaps driver is loaded. Use "make HDAPS=1 ..." to'\
-	'patch hdaps for compatibility with tp_smapi.'; exit 1; fi
+	'patch hdaps for compatibility with tp_smapi.'\
+	'This requires a kernel source tree.'; exit 1; fi
 endif
 
 install: modules
@@ -72,12 +67,8 @@ endif
 	$(MAKE) -C $(KSRC) M=$(PWD) modules_install
 	depmod -a
 
-hdaps.c: $(KSRC)/drivers/hwmon/hdaps.c $(HDAPS_DIFF)
-	patch -d $(KSRC) -i $(PWD)/$(HDAPS_DIFF) -p1 -o $(PWD)/hdaps.c
-
-diff/hdaps-2.6.14.diff: diff/hdaps.diff diff/hdaps-2.6.14.diff.diff
-	cp diff/hdaps.diff diff/hdaps-2.6.14.diff
-	patch -i diff/hdaps-2.6.14.diff.diff -p1
+hdaps.c: $(KSRC)/drivers/hwmon/hdaps.c diff/hdaps.diff
+	patch -d $(KSRC) -i $(PWD)/diff/hdaps.diff -p1 -o $(PWD)/hdaps.c
 
 #####################################################################
 # Generate a stand-alone kernel patch
@@ -112,7 +103,6 @@ patch: hdaps.c
 	if [ "$(SMAPI_IN_PATCH)" == 1 ]; then \
 	sed -i -e '$$aobj-$$(CONFIG_TP_SMAPI)          += tp_smapi.o' $(NEW)/$(TP_DIR)/Makefile &&\
 	cp $(PWD)/tp_smapi.c $(NEW)/$(TP_DIR)/tp_smapi.c &&\
-	patch --no-backup-if-mismatch -s -d $(NEW)/$(TP_DIR) -i $(TP_SMAPI_DIFF) -p1 &&\
 	patch --no-backup-if-mismatch -s -d $(NEW)/$(TP_DIR) -i $(PWD)/diff/tp_smapi-no_cd.diff -p1 &&\
 	patch --no-backup-if-mismatch -s -d $(NEW) -i $(PWD)/diff/Kconfig-tp_smapi.diff -p1 &&\
 	mkdir -p $(NEW)/Documentation &&\
@@ -131,7 +121,7 @@ else
 #####################################################################
 # This part runs as a submake in kernel Makefile context:
 
-CFLAGS := $(CFLAGS) -I$(PWD)/include
+CFLAGS := $(CFLAGS) -I$(M)/include
 obj-m  := $(TP_MODULES)
 
 endif

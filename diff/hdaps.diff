@@ -1,6 +1,6 @@
 --- a/drivers/hwmon/hdaps.c	2006-01-01 00:00:00.000000000 +0000
 +++ b/drivers/hwmon/hdaps.c	2006-01-01 00:00:00.000000000 +0000
-@@ -33,74 +33,61 @@
+@@ -33,74 +33,62 @@
  #include <linux/module.h>
  #include <linux/timer.h>
  #include <linux/dmi.h>
@@ -60,6 +60,7 @@
 -static int rest_y;
 -
 -static DECLARE_MUTEX(hdaps_sem);
++static unsigned int hdaps_force;
 +static int needs_calibration = 0;
  
 -/*
@@ -106,7 +107,7 @@
  			return 0;
  		udelay(5);
  	}
-@@ -108,82 +95,63 @@ static int __wait_latch(u16 port, u8 val
+@@ -108,82 +96,63 @@ static int __wait_latch(u16 port, u8 val
  	return -EIO;
  }
  
@@ -122,26 +123,26 @@
 -		outb(0x01, 0x161f);
 -	}
 -}
- 
+-
 -/*
 - * __device_refresh_sync - request a synchronous refresh from the
 - * accelerometer.  We wait for the refresh to complete.  Returns zero if
 - * successful and nonzero on error.  Callers must hold hdaps_sem.
-+/* hdaps_read_row - read a row of data from the controller.
-+ * Also prefetches the next read, to reduce udelay busy-waiting.
-+ * If fast, do one quick attempt without retries.
-+ * Caller must hold controller lock.
-  */
+- */
 -static int __device_refresh_sync(void)
 -{
 -	__device_refresh();
 -	return __wait_latch(0x1604, STATE_FRESH);
 -}
--
+ 
 -/*
 - * __device_complete - indicate to the accelerometer that we are done reading
 - * data, and then initiate an async refresh.  Callers must hold hdaps_sem.
-- */
++/* hdaps_read_row - read a row of data from the controller.
++ * Also prefetches the next read, to reduce udelay busy-waiting.
++ * If fast, do one quick attempt without retries.
++ * Caller must hold controller lock.
+  */
 -static inline void __device_complete(void)
 -{
 -	inb(0x161f);
@@ -235,7 +236,7 @@
  	}
  
  	return 0;
-@@ -192,16 +160,23 @@ static int __hdaps_read_pair(unsigned in
+@@ -192,16 +161,23 @@ static int __hdaps_read_pair(unsigned in
  /*
   * hdaps_read_pair - reads the values from a pair of ports, placing the values
   * in the given pointers.  Returns zero on success.  Can sleep.
@@ -266,22 +267,19 @@
  	return ret;
  }
  
-@@ -211,30 +186,28 @@ static int hdaps_read_pair(unsigned int 
+@@ -211,30 +187,29 @@ static int hdaps_read_pair(unsigned int 
   */
  static int hdaps_device_init(void)
  {
 -	int total, ret = -ENXIO;
-+	int ret = -ENXIO;
-+	u8 status;
- 
+-
 -	down(&hdaps_sem);
-+	tp_controller_lock();
- 
- 	outb(0x13, 0x1610);
- 	outb(0x01, 0x161f);
- 	if (__wait_latch(0x161f, 0x00))
- 		goto out;
- 
+-
+-	outb(0x13, 0x1610);
+-	outb(0x01, 0x161f);
+-	if (__wait_latch(0x161f, 0x00))
+-		goto out;
+-
 -	/*
 -	 * Most ThinkPads return 0x01.
 -	 *
@@ -293,7 +291,18 @@
 -	if (__check_latch(0x1611, 0x03) &&
 -		     __check_latch(0x1611, 0x02) &&
 -		     __check_latch(0x1611, 0x01))
-+	status = inb(0x1611);
++	int ret = -ENXIO;
++	u8 row[TP_CONTROLLER_ROW_LEN];
++	u8 status;
++
++	tp_controller_lock();
++
++	if (tp_controller_read_row(0x13, 0x01, row))
++		goto out;
++	if (row[0xf]!=0x00)
++		goto out;
++	status = row[1];	
++		
 +	if (status != 0x03 && /* Invertex axes (ThinkPad R50p, T41p, R42p) */
 +	    status != 0x02 && /* Chip already initialized */
 +	    status != 0x01 )  /* Normal axes */
@@ -309,7 +318,7 @@
  
  	outb(0x17, 0x1610);
  	outb(0x81, 0x1611);
-@@ -259,27 +232,18 @@ static int hdaps_device_init(void)
+@@ -259,27 +234,18 @@ static int hdaps_device_init(void)
  	outb(0x01, 0x161f);
  	if (__wait_latch(0x161f, 0x00))
  		goto out;
@@ -346,7 +355,7 @@
  	return ret;
  }
  
-@@ -298,6 +262,13 @@ static int hdaps_probe(struct platform_d
+@@ -298,6 +264,13 @@ static int hdaps_probe(struct platform_d
  	return 0;
  }
  
@@ -360,7 +369,7 @@
  static int hdaps_resume(struct platform_device *dev)
  {
  	return hdaps_device_init();
-@@ -305,6 +276,7 @@ static int hdaps_resume(struct platform_
+@@ -305,6 +278,7 @@ static int hdaps_resume(struct platform_
  
  static struct platform_driver hdaps_driver = {
  	.probe = hdaps_probe,
@@ -368,7 +377,7 @@
  	.resume = hdaps_resume,
  	.driver	= {
  		.name = "hdaps",
-@@ -313,34 +285,43 @@ static struct platform_driver hdaps_driv
+@@ -313,34 +287,43 @@ static struct platform_driver hdaps_driv
  };
  
  /*
@@ -426,7 +435,7 @@
  }
  
  
-@@ -349,65 +330,55 @@ out:
+@@ -349,65 +332,55 @@ out:
  static ssize_t hdaps_position_show(struct device *dev,
  				   struct device_attribute *attr, char *buf)
  {
@@ -508,7 +517,7 @@
  }
  
  static ssize_t hdaps_calibrate_show(struct device *dev,
-@@ -420,10 +391,7 @@ static ssize_t hdaps_calibrate_store(str
+@@ -420,10 +393,7 @@ static ssize_t hdaps_calibrate_store(str
  				     struct device_attribute *attr,
  				     const char *buf, size_t count)
  {
@@ -519,7 +528,14 @@
  	return count;
  }
  
-@@ -536,14 +504,9 @@ static int __init hdaps_init(void)
+@@ -530,20 +500,15 @@ static int __init hdaps_init(void)
+ 		{ .ident = NULL }
+ 	};
+ 
+-	if (!dmi_check_system(hdaps_whitelist)) {
++	if (!(dmi_check_system(hdaps_whitelist) || hdaps_force)) {
+ 		printk(KERN_WARNING "hdaps: supported laptop not found!\n");
+ 		ret = -ENXIO;
  		goto out;
  	}
  
@@ -535,7 +551,7 @@
  
  	pdev = platform_device_register_simple("hdaps", -1, NULL, 0);
  	if (IS_ERR(pdev)) {
-@@ -561,8 +524,8 @@ static int __init hdaps_init(void)
+@@ -561,8 +526,8 @@ static int __init hdaps_init(void)
  		goto out_group;
  	}
  
@@ -546,7 +562,7 @@
  
  	/* initialize the input class */
  	hdaps_idev->name = "hdaps";
-@@ -590,8 +553,6 @@ out_device:
+@@ -590,8 +555,6 @@ out_device:
  	platform_device_unregister(pdev);
  out_driver:
  	platform_driver_unregister(&hdaps_driver);
@@ -555,7 +571,7 @@
  out:
  	printk(KERN_WARNING "hdaps: driver init failed (ret=%d)!\n", ret);
  	return ret;
-@@ -604,7 +565,6 @@ static void __exit hdaps_exit(void)
+@@ -604,7 +567,6 @@ static void __exit hdaps_exit(void)
  	sysfs_remove_group(&pdev->dev.kobj, &hdaps_attribute_group);
  	platform_device_unregister(pdev);
  	platform_driver_unregister(&hdaps_driver);
@@ -563,3 +579,13 @@
  
  	printk(KERN_INFO "hdaps: driver unloaded.\n");
  }
+@@ -615,6 +577,9 @@ module_exit(hdaps_exit);
+ module_param_named(invert, hdaps_invert, bool, 0);
+ MODULE_PARM_DESC(invert, "invert data along each axis");
+ 
++module_param_named(force, hdaps_force, bool, 0);
++MODULE_PARM_DESC(force, "force loading on non whitelisted laptops");
++
+ MODULE_AUTHOR("Robert Love");
+ MODULE_DESCRIPTION("IBM Hard Drive Active Protection System (HDAPS) driver");
+ MODULE_LICENSE("GPL v2");

@@ -216,18 +216,19 @@ EXPORT_SYMBOL_GPL(tp_controller_invalidate);
 
 /*** Model whitelist ***/
 
-#define TP_DMI_MATCH(model)	{		\
+#define TP_DMI_MATCH(vendor,model)	{		\
 	.ident = "IBM " model,				\
 	.matches = {					\
-		DMI_MATCH(DMI_BOARD_VENDOR, "IBM"),	\
+		DMI_MATCH(DMI_BOARD_VENDOR, vendor),	\
 		DMI_MATCH(DMI_PRODUCT_VERSION, model)	\
 	}						\
 }
 
 static int is_thinkpad(void) {
 	struct dmi_system_id tp_whitelist[] = {
-		TP_DMI_MATCH("ThinkPad"),      /* starts with "ThinkPad" */
-		TP_DMI_MATCH("Not Available"), /* e.g., ThinkPad R40 */
+		TP_DMI_MATCH("LENOVO","ThinkPad"),
+		TP_DMI_MATCH("IBM","ThinkPad"),
+		TP_DMI_MATCH("IBM","Not Available"), /* e.g., ThinkPad R40 */
 		{ .ident = NULL }
 	};
 	return dmi_check_system(tp_whitelist);

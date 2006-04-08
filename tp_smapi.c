@@ -31,7 +31,7 @@
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#define TP_VERSION "0.19"
+#define TP_VERSION "0.20"
 
 #include <linux/kernel.h>
 #include <linux/module.h>
@@ -42,18 +42,9 @@
 #include <linux/delay.h>
 #include <linux/version.h>
 #include <linux/tp_base.h>
+#include <linux/platform_device.h>
 #include <asm/uaccess.h>
 #include <asm/io.h>
-
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,15)
-#include <linux/platform_device.h>
-#else
-#include <linux/device.h>
-#endif
-
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,13)
-#error Requires kernel 2.6.13 or higher. Use tp_smapi 0.08 for older kernels.
-#endif
 
 #define TP_DESC "ThinkPad SMAPI Support"
 #define TP_DIR "smapi"
@@ -1031,14 +1022,8 @@ static int cd_speed_store(struct device *dev,
 
 static int saved_threshs[4] = {-1, -1, -1, -1};  /* -1 = don't know */
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,15)
 static int tp_suspend(struct platform_device *dev, pm_message_t state)
 {
-#else
-static int tp_suspend(struct device *dev, pm_message_t state, uint32_t level)
-{
-	if (level == SUSPEND_SAVE_STATE) {
-#endif
 	if (get_real_thresh(0, THRESH_STOP , &saved_threshs[0], NULL, NULL)) 
 		saved_threshs[0]=-1;
 	if (get_real_thresh(0, THRESH_START, &saved_threshs[1], NULL, NULL))
@@ -1049,20 +1034,11 @@ static int tp_suspend(struct device *dev, pm_message_t state, uint32_t level)
 		saved_threshs[3]=-1;
 	DPRINTK("suspend saved: %d %d %d %d\n", saved_threshs[0],
 	        saved_threshs[1], saved_threshs[2], saved_threshs[3]);
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,15)
-	}
-#endif
 	return 0;
 }
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,15)
 static int tp_resume(struct platform_device *dev)
 {
-#else
-static int tp_resume(struct device *dev, u32 level)
-{
-	if (level == RESUME_RESTORE_STATE) {
-#endif
 	DPRINTK("resume restoring: %d %d %d %d\n", saved_threshs[0], 
 	        saved_threshs[1], saved_threshs[2], saved_threshs[3]);
 	if (saved_threshs[0]>=0) 
@@ -1073,9 +1049,6 @@ static int tp_resume(struct device *dev, u32 level)
 		set_real_thresh(1, THRESH_STOP , saved_threshs[2]);
 	if (saved_threshs[3]>=0)
 		set_real_thresh(1, THRESH_START, saved_threshs[3]);
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,15)
-	}
-#endif
 	return 0;
 }
 
@@ -1084,7 +1057,6 @@ static int tp_resume(struct device *dev, u32 level)
  * Driver model
  */
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,15)
 static struct platform_driver tp_driver = {
 	.suspend = tp_suspend,
 	.resume = tp_resume,
@@ -1093,15 +1065,6 @@ static struct platform_driver tp_driver = {
 		.owner = THIS_MODULE
 	},
 };
-#else
-static struct device_driver tp_driver = {
-	.name = "smapi",
-	.bus = &platform_bus_type,
-	.owner = THIS_MODULE,
-	.suspend = tp_suspend,
-	.resume = tp_resume
-};
-#endif
 
 
 /*********************************************************************
@@ -1243,15 +1206,10 @@ static int __init tp_init(void)
 		goto err_port1;
 	}
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,15)
 	ret = platform_driver_register(&tp_driver);
-#else
-	ret = driver_register(&tp_driver);
-#endif
 	if (ret)
 		goto err_port2;
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,15)
 	pdev = platform_device_alloc("smapi", -1);
 	if (!pdev) {
 		ret = -ENOMEM;
@@ -1261,13 +1219,6 @@ static int __init tp_init(void)
 	ret = platform_device_add(pdev);
 	if (ret)
 		goto err_device_free;
-#else
-	pdev = platform_device_register_simple("smapi", -1, NULL, 0);
-	if (IS_ERR(pdev)) {
-		ret = PTR_ERR(pdev);
-		goto err_driver;
-	}
-#endif
 
 	for (next_attr_group = attr_groups; *next_attr_group; ++next_attr_group) {
 		ret = sysfs_create_group(&pdev->dev.kobj, *next_attr_group);
@@ -1282,16 +1233,10 @@ err_attr:
 	while (--next_attr_group >= attr_groups)
 		sysfs_remove_group(&pdev->dev.kobj, *next_attr_group);
 	platform_device_unregister(pdev);
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,15)
 err_device_free:
 	platform_device_put(pdev);
-#endif
 err_driver:
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,15)
 	platform_driver_unregister(&tp_driver);
-#else
-	driver_unregister(&tp_driver);
-#endif
 err_port2:
 	release_region(SMAPI_PORT2, 1);
 err_port1:
@@ -1306,11 +1251,7 @@ static void __exit tp_exit(void)
 	while (next_attr_group && --next_attr_group >= attr_groups)
 		sysfs_remove_group(&pdev->dev.kobj, *next_attr_group);
 	platform_device_unregister(pdev);
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,15)
 	platform_driver_unregister(&tp_driver);
-#else
-	driver_unregister(&tp_driver);
-#endif
 	release_region(SMAPI_PORT2, 1);
 	if (smapi_port)
 		release_region(smapi_port, 1);
