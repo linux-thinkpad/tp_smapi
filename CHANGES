@@ -1,11 +1,26 @@
 Change history for tp_smapi:
 
+0.21  2006-06-21
+----------------
+- Compatibility with kernel 2.6.17.
+- hdaps: Fixed a locking bug. This further reduces (completely solves?) the
+  EC hangs problem.
+  (Thanks to Rasto, Andrew and Whoopie for helping track this down!)
+- hdaps: Support for ThinkPad T60: added 0x04 as valid initial latch value
+- hdaps: Mousedev poll timer was not restarted after resume from suspend.
+- tp_base: Added verbose debug output, enabled by the "debug=1" module
+  parameter (and by "make load DEBUG=1")
+- tp_base: Cosmetic fix to tp_base DMI vendor reporting (patch by Whoopie).
+- Cleaned up some printk()s.
+- Makefile: "make load" now enables dmesg debug output only if given DEBUG=1.
+- Makefile: will not delete hdaps.c if edited manually after generation.
+
 0.20  2006-04-30
 ----------------
 - Makefile: fix for "linux/tp_base.h: No such file or directory" problem.
 - tp_base: whitelist "LENOVO" vendor string too.
 - hdaps: add "force=1" parameter to force loading on models that are
-  not whitelisted.
+  not whitelisted (patch by Whoopie).
 - hdaps: fix init on several models by using tp_controller_read_row()
   instead of direct port IO. This apparently also makes the initial latch
   value is meaningful even when the device is already initialized.

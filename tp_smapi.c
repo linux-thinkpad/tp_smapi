@@ -31,8 +31,6 @@
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#define TP_VERSION "0.20"
-
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/init.h>
@@ -46,6 +44,7 @@
 #include <asm/uaccess.h>
 #include <asm/io.h>
 
+#define TP_VERSION "0.21"
 #define TP_DESC "ThinkPad SMAPI Support"
 #define TP_DIR "smapi"
 
@@ -180,7 +179,7 @@ static int smapi_request(u32 inBX, u32 inCX,
 
 retry:
 	DPRINTK("req_in: BX=%x CX=%x DI=%x SI=%x\n",
-		(int)inBX, (int)inCX, (int)inDI, (int)inSI);
+		inBX, inCX, inDI, inSI);
 
 	tp_controller_lock(); /* SMAPI and tp_base use different interfaces to
 	                       * the same chip, so stay on the safe side.      */
@@ -191,6 +190,7 @@ retry:
 		"movl  %7,%%ecx\n\t"
 		"movl  %8,%%edi\n\t"
 		"movl  %9,%%esi\n\t"
+		"xorl  %%edx,%%edx\n\t"
 		"movw  %10,%%dx\n\t"
 		"out   %%al,%%dx\n\t"  /* trigger SMI to invoke BIOS in SMM */
 		"out   %%al,$0x4F\n\t"
@@ -224,10 +224,9 @@ retry:
 	*msg = smapi_rc[i].msg;
 
 	DPRINTK("req_out: AX=%x BX=%x CX=%x DX=%x DI=%x SI=%x ret=%d\n",
-	        (int)*outAX, (int)*outBX, (int)*outCX, (int)*outDX,
-	        (int)*outDI, (int)*outSI, ret);
+	        *outAX, *outBX, *outCX, *outDX, *outDI, *outSI, ret);
 	if (ret)
-		printk(TP_NOTICE "SMAPI error: %s (func=%x)\n", *msg, (int)inBX);
+		printk(TP_NOTICE "SMAPI error: %s (func=%x)\n", *msg, inBX);
 
 	if (ret==-EBUSY && --retries) {
 		/* Retry */
@@ -315,7 +314,7 @@ static int get_real_thresh(int bat, int start, int *thresh,
 	}
 	if (!(cx&0x00000100)) {
 		printk(TP_NOTICE "cannot get %s_thresh of battery %d: cx=0%x\n", 
-		       start?"start":"stop", bat, (int)cx);
+		       start?"start":"stop", bat, cx);
 		return -EIO;
 	}
 	if (thresh)
@@ -389,7 +388,7 @@ static int get_inhibit_charge(int bat, int *minutes, u8 *outCL) {
 	}
 	if (!(cx&0x0100)) {
 		printk(TP_NOTICE "cannot get inhibit_charge of battery %d: "
-		       "cx=0x%x\n", bat, (int)cx);
+		       "cx=0x%x\n", bat, cx);
 		return -EIO;
 	}
 	if (minutes)

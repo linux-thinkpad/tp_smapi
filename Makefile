@@ -16,6 +16,8 @@ else
 LOAD_HDAPS  := :
 endif
 
+DEBUG := 0
+
 ifneq ($(shell [ -f $(KSRC)/include/linux/platform_device.h ] && echo 1),1)
 	$(error This driver requires kernel 2.6.15 or newer.)
 endif
@@ -38,13 +40,18 @@ clean:
 	rm -f hdaps.mod.* hdaps.o hdaps.ko .hdaps.*.cmd
 	rm -f *~ diff/*~ *.orig diff/*.orig *.rej diff/*.rej
 	rm -f tp_smapi-*-for-*.patch 
-	rm -fr .tmp_versions
+	rm -fr .tmp_versions Modules.symvers
+	@if [ -f hdaps.c -a hdaps.c.flag -ot hdaps.c ]; then \
+		echo 'WARNING: hdaps.c has changed since autogeneration, will not delete.'; \
+	else \
+		rm -f hdaps.c hdaps.c.flag; \
+	fi
 
 load: check_hdaps unload modules
-	{ insmod ./tp_base.ko &&\
-	  insmod ./tp_smapi.ko debug=1 &&\
+	{ insmod ./tp_base.ko debug=$(DEBUG) &&\
+	  insmod ./tp_smapi.ko debug=$(DEBUG) &&\
 	  $(LOAD_HDAPS); }; :
-	@echo -e '\nRecent dmesg output:' ; dmesg | tail -7
+	@echo -e '\nRecent dmesg output:' ; dmesg | tail -8
 
 unload:
 	if lsmod | grep -q '^hdaps '; then rmmod hdaps; fi
@@ -67,8 +74,15 @@ endif
 	$(MAKE) -C $(KSRC) M=$(PWD) modules_install
 	depmod -a
 
+# Match hdaps.c from kernel tree into local copy.
+# (First do a small change in our own patch if kernel 2.6.17.)
 hdaps.c: $(KSRC)/drivers/hwmon/hdaps.c diff/hdaps.diff
-	patch -d $(KSRC) -i $(PWD)/diff/hdaps.diff -p1 -o $(PWD)/hdaps.c
+	cat $(PWD)/diff/hdaps.diff \
+	| if grep -q 'ret = -ENODEV' $(KSRC)/drivers/hwmon/hdaps.c; then \
+	  perl -pe 'm/^ \t\tret = -ENXIO;/ && s/NXIO/NODEV/'; else cat; fi \
+	| patch -d $(KSRC) -p1 -o $(PWD)/hdaps.c
+	@touch -r hdaps.c hdaps.c.flag
+
 
 #####################################################################
 # Generate a stand-alone kernel patch

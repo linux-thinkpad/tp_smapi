@@ -33,9 +33,11 @@
 #include <linux/jiffies.h>
 #include <asm/io.h>
 
+#define TP_VERSION "0.21"
+
 MODULE_AUTHOR("Shem Multinymous");
-MODULE_DESCRIPTION("ThinkPad hardware access coordination");
-MODULE_VERSION("0.03");
+MODULE_DESCRIPTION("ThinkPad embedded controller hardware access");
+MODULE_VERSION(TP_VERSION);
 MODULE_LICENSE("GPL");
 
 #define TPC_BASE_PORT 0x1600
@@ -49,9 +51,14 @@ MODULE_LICENSE("GPL");
 
 static DECLARE_MUTEX(tp_controller_sem);
 
+static int tp_debug = 0;
+module_param_named(debug, tp_debug, int, 0600);
+MODULE_PARM_DESC(debug, "Debug level (0=off, 1=on)");
+
+#define DPRINTK(fmt, args...) { if (tp_debug) printk(KERN_DEBUG "tp_base: " fmt, ## args); }
+
 static u64 prefetch_jiffies = TPC_PREFETCH_INVALID;  /* time of prefetch */
 static u8 prefetch_arg1610, prefetch_arg161F;   /* args of last prefetch */
-
 
 /*** Functionality ***/
 
@@ -79,6 +86,8 @@ static int tp_controller_request_row(u8 arg1610, u8 arg161F) {
 	status = inb(0x1604);
 	if (status&0x40) { /* readout data already pending? */
 		inb(0x161F); /* marks end of previous transaction */
+		DPRINTK("readout already pending (0x%02x,0x%02x)->0x%02x\n",
+		        arg1610, arg161F, status);
 		return -EBUSY; /* EC will be ready in a few usecs */
 	}
 
@@ -86,6 +95,16 @@ static int tp_controller_request_row(u8 arg1610, u8 arg161F) {
 	outb(arg1610, 0x1610);
 	status = inb(0x1604);
 	if (status!=0x20) { /* not accepted? */
+		DPRINTK("arg1610 not accepted (0x%02x,0x%02x)->0x%02x\n",
+		        arg1610, arg161F, status);
+		if (tp_debug) { /* Someone else touching the EC? */
+			static int dumps_left=20; 
+			if (dumps_left) { /* May occur often, don't flood. */
+				printk("" "tp_base: arg1610 not accepted:\n");
+				dump_stack(); 
+				dumps_left--;
+			}
+		}
 		return -EBUSY; /* the EC is handling a prior request */
 	}
 
@@ -93,8 +112,9 @@ static int tp_controller_request_row(u8 arg1610, u8 arg161F) {
 	outb(arg161F, 0x161F);
 	status = inb(0x1604);
 	if (status==0x20) { /* not responding? */
-		printk(KERN_WARNING "tp_base: 161F rejected (status=%#x)\n",
-		       status);
+		printk(KERN_WARNING 
+		       "tp_base: 161F rejected (0x%02x,0x%02x)->0x%02x\n",
+		        arg1610, arg161F, status);
 		return -EIO;  /* this is abnormal */
 	}
 
@@ -112,11 +132,12 @@ static int tp_controller_read_data(u8* buf) {
 	 * finally bit 0x40 goes up (usually 0x50) signalling data ready.
 	 * It takes about a dozen nanosecs total, with very high variance.
 	 */
-	if (status==0xA0 || status==0x00 || status==0x10)
+	if (status==0xA0 || status==0x00 || status==0x10) {
 		return -EBUSY; /* not ready yet */
+	}
 	if (!(status&0x40)) {
-		printk(KERN_WARNING "tp_base: bad status (%#x) in read\n",
-		       (int)status);
+		printk(KERN_WARNING "tp_base: bad status (0x%02x) in read\n",
+		       status);
 		return -EIO;
 	}
 		
@@ -152,8 +173,8 @@ int tp_controller_read_row(u8 arg1610, u8 arg161F, u8* buf) {
 		udelay(TPC_READ_UDELAY);
 	}
 	printk(KERN_ERR 
-	       "thinkpad controller read(%#x,%#x): failed requesting row\n",
-	       (int)arg1610, (int)arg161F);
+	       "thinkpad controller read(0x%02x,0x%02x): failed requesting row\n",
+	       arg1610, arg161F);
 	goto out;
 
 read_row:
@@ -168,8 +189,8 @@ read_row:
 	}
 
 	printk(KERN_ERR 
-	       "thinkpad controller read(%#x,%#x): failed waiting for data\n",
-	       (int)arg1610, (int)arg161F);
+	       "thinkpad controller read(0x%02x,0x%02x): failed waiting for data\n",
+	       arg1610, arg161F);
 
 out:
 	prefetch_jiffies = TPC_PREFETCH_INVALID;
@@ -180,11 +201,19 @@ EXPORT_SYMBOL_GPL(tp_controller_read_row);
 
 /* Read a prefetched row from the controller. Don't fetch, don't retry. */
 int tp_controller_try_read_row(u8 arg1610, u8 arg161F, u8* buf) {
-	if (!tp_controller_is_row_fetched(arg1610,arg161F))
+	int ret;
+	if (!tp_controller_is_row_fetched(arg1610,arg161F)) {
+		DPRINTK("try_read_row(0x%02x,0x%02x): row not fetched\n",
+		        arg1610, arg161F);
 		return -ENODATA;
-	else {
+	} else {
 		prefetch_jiffies = TPC_PREFETCH_INVALID; /* data eaten up */
-		return tp_controller_read_data(buf);
+		ret = tp_controller_read_data(buf);
+		if (ret)
+			DPRINTK("try_read_row(0x%02x,0x%02x): "
+			        "read failed with %d\n",
+			        arg1610, arg161F, ret);
+		return ret;
 	}
 }
 
@@ -217,7 +246,7 @@ EXPORT_SYMBOL_GPL(tp_controller_invalidate);
 /*** Model whitelist ***/
 
 #define TP_DMI_MATCH(vendor,model)	{		\
-	.ident = "IBM " model,				\
+	.ident = vendor " " model,			\
 	.matches = {					\
 		DMI_MATCH(DMI_BOARD_VENDOR, vendor),	\
 		DMI_MATCH(DMI_PRODUCT_VERSION, model)	\
@@ -251,7 +280,7 @@ static int __init tp_base_init(void) {
 		       TPC_BASE_PORT+TPC_NUM_PORTS -1);
 		return -ENXIO;
 	}
-	printk(KERN_INFO "tp_base: loaded.\n");
+	printk(KERN_INFO "tp_base: tp_base " TP_VERSION " loaded.\n");
 	return 0;
 }
 
