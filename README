@@ -1,4 +1,4 @@
-IBM ThinkPad SMAPI Driver v0.21
+IBM ThinkPad SMAPI Driver v0.22
 Author:  Shem Multinymous <multinymous@gmail.com>
 Project: http://sourceforge.net/projects/tpctl
 Wiki:    http://thinkwiki.org/wiki/tp_smapi
@@ -258,9 +258,9 @@ returned in the CPU's registers. It is not clear what is the relation between
 the two variants of SMAPI, though the assignment of error codes seems to be 
 similar.
 
-In addition to the above, battery information is accessible through IO ports
-0x1604-0x161F (these provide a virtual address space, which exposes both 
-battery information and HDAPS accelerometer data). It's not clear which
-hardware component handles these ports; maybe it's another interface to the
-embedded controller (in addition to the above SMAPI protocol and the standard
-EC interface at ports 0x62,0x66).
+In addition, the embedded controller on ThinkPad laptops has a non-standard 
+interface at IO ports 0x1600-0x161F (mapped to LCP channel 3 of the H8S chip).
+The interface provides various system management services (currently known: 
+battery information and accelerometer readouts). For more information see the
+tp_base modul and the H8S hardware documentation:
+http://documentation.renesas.com/eng/products/mpumcu/rej09b0300_2140bhm.pdf

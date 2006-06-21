@@ -1,15 +1,18 @@
 --- linux-2.6.15-rc5-orig/drivers/firmware/Kconfig	2005-12-13 19:13:57.000000000 +0200
 +++ linux-2.6.15-rc5-patched/drivers/firmware/Kconfig	2005-12-21 00:35:13.000000000 +0200
-@@ -87,2 +87,13 @@
+@@ -88,4 +88,16 @@
+ config TP_BASE
+ 	tristate
  
 +config TP_SMAPI
 +	tristate "ThinkPad SMAPI Support"
-+	depends on X86 && TP_BASE
++	depends on X86
++	select TP_BASE
 +	default n
 +	help
 +	  This adds SMAPI support on IBM ThinkPads, mostly used for battery
 +	  charge control. For more information about this driver see
-+	  <http://www.thinkwiki.org/wiki/tp_smapi> .
++	  <http://www.thinkwiki.org/wiki/tp_smapi>.
 +
 +	  If you have an IBM ThinkPad laptop, say Y or M here.
 +

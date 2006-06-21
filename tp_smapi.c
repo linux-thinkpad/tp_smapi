@@ -10,11 +10,8 @@
  *  embedded controller (via the tp_base module).
  *
  *
- *  Copyright (C) 2005 Shem Multinymous <multinymous@gmail.com>.
- *  SMAPI access code based on the mwave driver by Mike Sullivan,
- *  Copyright (C) 1999 IBM Corporation.
- *  Module interface and DMI whitelist based on the hdaps module by
- *  Robert Love and Jesper Juhl.
+ *  Copyright (C) 2006 Shem Multinymous <multinymous@gmail.com>.
+ *  SMAPI access code based on the mwave driver by Mike Sullivan.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -44,7 +41,7 @@
 #include <asm/uaccess.h>
 #include <asm/io.h>
 
-#define TP_VERSION "0.21"
+#define TP_VERSION "0.22"
 #define TP_DESC "ThinkPad SMAPI Support"
 #define TP_DIR "smapi"
 
@@ -133,7 +130,7 @@ static struct {u8 rc; char *msg; int ret;} smapi_rc[]=
 #define SMAPI_PORT2 0x4F              /* fixed port, meaning unclear */
 static unsigned short smapi_port = 0; /* APM control port, normally 0xB2 */
 
-static DECLARE_MUTEX(smapi_sem);
+static DECLARE_MUTEX(smapi_mutex);
 
 #define SMAPI_MAX_RETRIES 10
 
@@ -181,8 +178,12 @@ retry:
 	DPRINTK("req_in: BX=%x CX=%x DI=%x SI=%x\n",
 		inBX, inCX, inDI, inSI);
 
-	tp_controller_lock(); /* SMAPI and tp_base use different interfaces to
-	                       * the same chip, so stay on the safe side.      */
+	/* SMAPI's SMI call and tp_base end up using the same interface 
+	 * (ports 0x1600-0x161F).use different interfaces to the same chip,
+	 * they must be excluded from each other.                          */
+	ret = tp_controller_lock(); 
+	if (ret)
+		return ret;
 
 	__asm__ __volatile__(
 		"movl  $0x00005380,%%eax\n\t"
@@ -269,11 +270,20 @@ static int smapi_write(u32 inBX, u32 inCX,
  */
 
 /* Lock controller and read row */
-static int tpc_read_row(u8 arg1610, u8 arg161F, u8* buf) {
+static int tpc_read_row(u8 arg0, int bat, u8* dataval) {
 	int ret;
-	tp_controller_lock();
-	ret = tp_controller_read_row(arg1610, arg161F, buf);
+	struct tp_controller_row args, data;
+
+	ret = tp_controller_lock();
+	if (ret)
+		return ret;
+	args.val[0x0] = arg0;
+	args.val[0xF] = (u8)bat;
+	args.mask = 0x8001;
+	data.mask = 0xFFFF;
+	ret = tp_controller_read_row(&args, &data);
 	tp_controller_unlock();
+	memcpy(dataval, &data.val, TP_CONTROLLER_ROW_LEN);
 	return ret;
 }
 
@@ -579,7 +589,7 @@ static int attr_get_bat(struct device_attribute *attr) {
 	return container_of(attr, struct bat_device_attribute, dev_attr)->bat;
 }
 
-static int show_tpc_bat_word(const char* fmt, u8 arg1610, int off,
+static int show_tpc_bat_word(const char* fmt, u8 arg0, int off,
                              struct device_attribute *attr, char *buf)
 {
 	u8 row[TP_CONTROLLER_ROW_LEN];
@@ -587,13 +597,13 @@ static int show_tpc_bat_word(const char* fmt, u8 arg1610, int off,
 	int ret;
 	if (bat_has_extended_status(bat)!=1) 
 		return -ENXIO;
-	ret = tpc_read_row(arg1610, bat, row);
+	ret = tpc_read_row(arg0, bat, row);
 	if (ret)
 		return ret;
 	return sprintf(buf, fmt, (int)*(u16*)(row+off));
 }
 
-static int show_tpc_bat_str(u8 arg1610, int off, int maxlen,
+static int show_tpc_bat_str(u8 arg0, int off, int maxlen,
                             struct device_attribute *attr, char *buf)
 {
 	int bat = attr_get_bat(attr);
@@ -601,7 +611,7 @@ static int show_tpc_bat_str(u8 arg1610, int off, int maxlen,
 	int ret;
 	if (bat_has_extended_status(bat)!=1) 
 		return -ENXIO;
-	ret = tpc_read_row(arg1610, bat, row);
+	ret = tpc_read_row(arg0, bat, row);
 	if (ret)
 		return ret;
 	strncpy(buf, (char*)row+off, maxlen);
@@ -610,7 +620,7 @@ static int show_tpc_bat_str(u8 arg1610, int off, int maxlen,
 	return strlen(buf);
 }
 
-static int show_tpc_bat_power(u8 arg1610, int offV, int offA,
+static int show_tpc_bat_power(u8 arg0, int offV, int offA,
                               struct device_attribute *attr, char *buf)
 {
 	u8 row[TP_CONTROLLER_ROW_LEN];
@@ -626,7 +636,7 @@ static int show_tpc_bat_power(u8 arg1610, int offV, int offA,
 	return sprintf(buf, "%d mW\n", milliamp*millivolt/1000);
 }
 
-static int show_tpc_bat_date(u8 arg1610, int off,
+static int show_tpc_bat_date(u8 arg0, int off,
                              struct device_attribute *attr, char *buf)
 {
 	u8 row[TP_CONTROLLER_ROW_LEN];
@@ -636,7 +646,7 @@ static int show_tpc_bat_date(u8 arg1610, int off,
 	int bat = attr_get_bat(attr);
 	if (bat_has_extended_status(bat)!=1) 
 		return -ENXIO;
-	ret = tpc_read_row(arg1610, bat, row);
+	ret = tpc_read_row(arg0, bat, row);
 	if (ret)
 		return ret;
 
@@ -692,7 +702,7 @@ static int battery_start_charge_thresh_store(struct device *dev,
 	if (thresh > MAX_THRESH_START) /* clamp down to MAX_THRESH_START */
 		thresh = MAX_THRESH_START;
 
-	down(&smapi_sem);
+	down(&smapi_mutex);
 	ret = get_thresh(bat, THRESH_STOP, &other_thresh);
 	if (ret!=-ENOSYS) {
 		if (ret) /* other threshold is set? */
@@ -710,7 +720,7 @@ static int battery_start_charge_thresh_store(struct device *dev,
 	}
 	ret = set_thresh(bat, THRESH_START, thresh);
 out:
-	up(&smapi_sem);
+	up(&smapi_mutex);
 	return count;
 
 }
@@ -731,7 +741,7 @@ static int battery_stop_charge_thresh_store(struct device *dev,
 	if (thresh<MIN_THRESH_STOP) /* clamp up to MIN_THRESH_STOP */
 		thresh = MIN_THRESH_STOP;
 
-	down(&smapi_sem);
+	down(&smapi_mutex);
 	ret = get_thresh(bat, THRESH_START, &other_thresh);
 	if (ret!=-ENOSYS) { /* other threshold exists? */
 		if (ret)
@@ -750,7 +760,7 @@ static int battery_stop_charge_thresh_store(struct device *dev,
 	}
 	ret = set_thresh(bat, THRESH_STOP, thresh);
 out:
-	up(&smapi_sem);
+	up(&smapi_mutex);
 	return count;
 }
 
@@ -960,18 +970,18 @@ static int battery_dump_show(
 	int j;
 	char* p = buf;
 	int bat = attr_get_bat(attr);
-	u8 arg1610;
+	u8 arg0;
 	u8 row[TP_CONTROLLER_ROW_LEN];
 	int ret;
 
-	for (arg1610=1; arg1610<=8; ++arg1610) {
-		ret = tpc_read_row(arg1610, bat, row);
+	for (arg0=1; arg0<=8; ++arg0) {
+		ret = tpc_read_row(arg0, bat, row);
 		if (ret)
 			return ret;
 		for (j=0; j<TP_CONTROLLER_ROW_LEN; j++)
 			p += sprintf(p, "%02x ", row[j]);
 		p += sprintf(p, "\n");
-		if (arg1610==1 && bat_has_extended_status(bat)!=1)
+		if (arg0==1 && bat_has_extended_status(bat)!=1)
 			goto done;
 		if ( (p-buf)>PAGE_SIZE-256 ) {
 			printk(TP_ERR "aps_dump_show: too much output!\n");

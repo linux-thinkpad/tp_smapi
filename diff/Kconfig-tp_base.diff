@@ -1,21 +1,20 @@
 --- linux-2.6.15-rc5-orig/drivers/firmware/Kconfig	2005-12-13 19:13:57.000000000 +0200
 +++ linux-2.6.15-rc5-patched/drivers/firmware/Kconfig	2005-12-21 00:35:13.000000000 +0200
-@@ -87,2 +87,11 @@
+@@ -85,4 +85,7 @@
+ 	  Say Y or M here to enable the driver for use by Dell systems
+ 	  management software such as Dell OpenManage.
  
 +config TP_BASE
-+	tristate "ThinkPad-specific hardware support"
-+	depends on X86
-+	default n
-+	help
-+	  This provides coordination of access to ThinkPad-specific hardware.
-+
-+	  If you have an IBM ThinkPad laptop, say Y or M here
++	tristate
 +
  endmenu
 --- linux-2.6.15-rc5-orig/drivers/hwmon/Kconfig	2005-10-28 02:02:08.000000000 +0200
 +++ linux-2.6.15-rc5-patched/drivers/hwmon/Kconfig	2005-12-21 00:42:22.000000000 +0200
-@@ -415,3 +415,3 @@
+@@ -437,6 +437,7 @@
+ config SENSORS_HDAPS
  	tristate "IBM Hard Drive Active Protection System (hdaps)"
--	depends on HWMON && INPUT && X86
-+	depends on HWMON && INPUT && X86 && TP_BASE
+ 	depends on HWMON && INPUT && X86
++	select TP_BASE
  	default n
+ 	help
+ 	  This driver provides support for the IBM Hard Drive Active Protection

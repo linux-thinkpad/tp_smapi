@@ -8,6 +8,7 @@ PWD         := $(shell pwd)
 IDIR        := include/linux
 TP_DIR      := drivers/firmware
 TP_MODULES  := tp_base.o tp_smapi.o 
+SHELL       := /bin/bash
 
 ifeq ($(HDAPS),1)
 TP_MODULES  += hdaps.o
@@ -22,7 +23,7 @@ ifneq ($(shell [ -f $(KSRC)/include/linux/platform_device.h ] && echo 1),1)
 	$(error This driver requires kernel 2.6.15 or newer.)
 endif
 
-.PHONY: default clean modules load unload install patch check_hdaps
+.PHONY: default clean modules load unload install patch check_hdaps mk-hdaps.diff
 export TP_MODULES
 
 #####################################################################
@@ -40,7 +41,7 @@ clean:
 	rm -f hdaps.mod.* hdaps.o hdaps.ko .hdaps.*.cmd
 	rm -f *~ diff/*~ *.orig diff/*.orig *.rej diff/*.rej
 	rm -f tp_smapi-*-for-*.patch 
-	rm -fr .tmp_versions Modules.symvers
+	rm -fr .tmp_versions Modules.symvers diff/hdaps.diff.tmp
 	@if [ -f hdaps.c -a hdaps.c.flag -ot hdaps.c ]; then \
 		echo 'WARNING: hdaps.c has changed since autogeneration, will not delete.'; \
 	else \
@@ -75,12 +76,14 @@ endif
 	depmod -a
 
 # Match hdaps.c from kernel tree into local copy.
-# (First do a small change in our own patch if kernel 2.6.17.)
+# (First do a small change in our own patch if kernel != 2.6.17.x)
 hdaps.c: $(KSRC)/drivers/hwmon/hdaps.c diff/hdaps.diff
 	cat $(PWD)/diff/hdaps.diff \
-	| if grep -q 'ret = -ENODEV' $(KSRC)/drivers/hwmon/hdaps.c; then \
-	  perl -pe 'm/^ \t\tret = -ENXIO;/ && s/NXIO/NODEV/'; else cat; fi \
-	| patch -d $(KSRC) -p1 -o $(PWD)/hdaps.c
+	| if ! grep -q 'ret = -ENODEV' $(KSRC)/drivers/hwmon/hdaps.c; then \
+	  perl -0777 -pe 's/(laptop not found.*\n.*)ENODEV/$$1ENXIO/'; else cat; fi \
+	| if grep -q 'Celsius' $(KSRC)/drivers/hwmon/hdaps.c; then \
+	  perl -0777 -pe 's/ celcius / Celsius /'; else cat; fi \
+	| patch -d $(KSRC) -p1 -o $(PWD)/hdaps.c  ||  { rm -v hdaps.c; exit 1; }
 	@touch -r hdaps.c hdaps.c.flag
 
 
@@ -123,13 +126,20 @@ patch: hdaps.c
 	perl -0777 -pe 's/\n(Installation\n---+|Conflict with HDAPS\n---+|Files in this package\n---+|Setting and getting CD-ROM speed:\n).*?\n(?=[^\n]*\n-----)/\n/gs' $(PWD)/README > $(NEW)/Documentation/tp_smapi.txt \
 	; fi &&\
 	\
-	{ diff -Nurp $(ORG) $(NEW) > patch \
+	{ diff -dNurp $(ORG) $(NEW) > patch \
 	  || [ $$? -lt 2 ]; } &&\
 	{ diffstat patch; echo; echo; cat patch; } \
 	  > $(PWD)/${PATCH} &&\
 	rm -r $$TMPDIR
 	@echo -e "\nPatch file created:\n  ${PATCH}"
 	@echo -e "To apply, use:\n  patch -p1 -d ${KSRC} < ${PATCH}"
+
+#####################################################################
+# Tools for preparing a release. Ignore these.
+
+mk-hdaps.diff: diff/hdaps.diff $(KSRC)/drivers/hwmon/hdaps.c
+	{ head -2 diff/hdaps.diff; diff -up -U3 $(KSRC)/drivers/hwmon/hdaps.c hdaps.c | tail -n +3; } > diff/hdaps.diff.tmp || :
+	mv diff/hdaps.diff.tmp diff/hdaps.diff
 
 else
 #####################################################################

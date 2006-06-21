@@ -1,5 +1,34 @@
 Change history for tp_smapi:
 
+0.22  2006-07-20
+----------------
+- hdaps: Added support for X60s (but X axis is still inverted).
+- tp_base: Wait until EC starts replying before considering a request 
+  successful (this improves stability and eliminates abnormal events.)
+- hdaps: Removed /sys/devices/platform/hdaps/{variance,temp2}. They actually
+  show an older pending readout (if there is one), so it never makes sense
+  to read them via the existing interface.
+- tp_base: Added many additional status and consistency checks on EC, 
+  to give early warning on any strange behavior.
+- tp_base: New constants and comments greatly clarify access to the EC.
+- hdaps: Convert all init code to use tp_base transactions. Mo more direct 
+  IO port access.
+- hdaps: Move some init code to new functions hdaps_set_power() and 
+  hdaps_set_ec_config(). These will be exposed as attributes in the future.
+- hdaps: If init failed, tell at which step it happened.
+- tp_base: Allow additional inputs and optional outputs to EC requests.
+- tp_base: Decrease timeout for reply to request.
+- Kconfig: Make TP_BASE an invisible tristate option
+- tp_base: Rename tp_controller_trylock() to tp_controller_try_lock().
+- tp_base: make tp_controller_lock() return an int; have it checked in 
+  tp_smapi and hdaps.
+- tp_base: Rewrote all printk()s using macros, and made debug=1 quieter.
+- Makefile: work even if $SHELL is not bash.
+- Makefile: Autopatch hdaps patch to work with 2.6.18-rc1
+
+Many of the above changes were suggested or contributed by
+Henrique de Moraes Holschuh.
+
 0.21  2006-06-21
 ----------------
 - Compatibility with kernel 2.6.17.
