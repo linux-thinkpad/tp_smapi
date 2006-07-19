@@ -1,0 +1,12 @@
+--- orig/tp_base.c	2006-08-02 00:00:00.000000000 +0000
++++ no-dmi-kludge/tp_base.c	2006-08-02 00:00:00.000000000 +0000
+@@ -402,9 +402,4 @@ static int __init check_for_embedded_con
+ 	};
+-#include "dmi_ec_oem_string.h"
+-#ifdef DMI_EC_OEM_STRING_KLUDGE
+-	return (strstr(DMI_EC_OEM_STRING_KLUDGE, "IBM ThinkPad Embedded Controller")) ||
+-#else
+ 	return dmi_find_substring(DMI_DEV_TYPE_OEM_STRING,
+ 	                          "IBM ThinkPad Embedded Controller") ||
+-#endif
+ 	       dmi_check_system(tp_whitelist);

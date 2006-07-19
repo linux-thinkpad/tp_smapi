@@ -1,4 +1,6 @@
-IBM ThinkPad SMAPI Driver v0.22
+tp_smapi version 0.25
+IBM ThinkPad hardware functions driver
+
 Author:  Shem Multinymous <multinymous@gmail.com>
 Project: http://sourceforge.net/projects/tpctl
 Wiki:    http://thinkwiki.org/wiki/tp_smapi
@@ -95,7 +97,7 @@ Inhibiting battery charging for 17 minutes (overrides thresholds):
 
 Forcing battery discharging even if AC power available:
 
-# echo 1 > /sys/devices/platform/smapi/BAT0/force_discharge
+# echo 1 > /sys/devices/platform/smapi/BAT0/force_discharge  # start discharge
 # echo 0 > /sys/devices/platform/smapi/BAT0/force_discharge  # stop discharge
 # cat /sys/devices/platform/smapi/BAT0/force_discharge
 
@@ -125,15 +127,36 @@ Misc read-only battery status (see note about HDAPS below):
 # cat /sys/devices/platform/smapi/BAT0/first_use_date
 # cat /sys/devices/platform/smapi/ac_connected
 
-The raw status data, including some fields not in the above (in case
-you can figure them out):
+You can also get a hex dump of the raw status data, which contains additional data
+now in the above (if you can figure it out). Some unused values are autodetected
+and replaced by "--":
 
 # cat /sys/devices/platform/smapi/BAT0/dump  
 
 In all of the above, replace BAT0 with BAT1 to address the 2nd battery.
 
 
+Controlling PCI bus power saving:
+
+# cat /sys/devices/platform/smapi/enable_pci_power_saving_on_boot
+# echo 1 > /sys/devices/platform/smapi/enable_pci_power_saving_on_boot # on
+# echo 0 > /sys/devices/platform/smapi/enable_pci_power_saving_on_boot # off
+
+This controls the "PCI bus power saving" option in the BIOS, and takes
+effect at the next boot. On ThinkPad T43, this setting is stored in bit 0x40
+of NVRAM byte 0x39, and turning it off increases idle power consumption 
+by about 350mW. Out-of-the-box default is 1.
+
+
+Raw SMAPI calls:
+
+/sys/devices/platform/smapi/smapi_request
+This performs raw SMAPI calls. It uses a bad interface that cannot handle
+multiple simultaneous access. Don't touch it, it's for development only.
+
+
 Setting and getting CD-ROM speed:
+
 # echo 0 > /sys/devices/platform/smapi/cd_speed # slow
 # echo 1 > /sys/devices/platform/smapi/cd_speed # medium
 # echo 2 > /sys/devices/platform/smapi/cd_speed # fast
@@ -150,10 +173,12 @@ Model-specific status
 ---------------------
 
 Works (at least partially) on the following ThinkPad model:
+* A30
 * G41
 * R40, R50p, R51, R52
-* T23, T40, T40p, T41, T41p, T42, T42p, T43, T43p
-* X24, X31, X32, X40, X41
+* T23, T40, T40p, T41, T41p, T42, T42p, T43, T43p, T60
+* X24, X31, X32, X40, X41, X60
+* Z60t, Z61m
 
 Not all functions are available on all models; for detailed status, see:
   http://thinkwiki.org/wiki/tp_smapi
@@ -201,17 +226,28 @@ Mail <multinymous@gmail.com>. Please include:
 Files in this package
 ---------------------
 
-README                       This file
-CHANGES                      Change log
-Makefile                     Makefile (see "Installation" above)
-tp_smapi.c                   tp_smapi driver (main code)
-tp_base.*                    tp_base driver (coordinates hardware access 
-                               between tp_smapi and hdaps)
-diff/hdaps.diff              Patch to make the hdaps driver use tp_base,
-                               plus several fixes to vanilla hdaps.c.
-diff/*  (excluding above)    Used by "make patch" to create a clean 
-                               stand-alone patch
-include/                     Contains a symlink to make gcc happy.
+README
+  This file.
+CHANGES
+  Change log.
+Makefile
+  Makefile (see "Installation" above).
+tp_smapi.c
+  tp_smapi driver module (main code).
+tp_base.*
+  tp_base driver module (coordinates hardware access between tp_smapi and 
+  hdaps)
+diff/hdaps.diff
+  Patch to make the hdaps driver use tp_base, plus several fixes to vanilla
+  hdaps.c.
+diff/dmi-decode-and-save-oem-string-information
+  A patch from the kernel -mm series, needed for hardware detection. 
+  If you don't have it, "make load" and "make install" will use a workaround
+  kludge, and the result of "make patch" will include this patch.
+diff/*  (excluding above)    
+  Used by "make patch" to create a clean stand-alone patch.
+include/
+  Contains a symlink to make gcc happy in kernel builds.
 
 
 Ideas for improvement

@@ -41,7 +41,7 @@
 #include <asm/uaccess.h>
 #include <asm/io.h>
 
-#define TP_VERSION "0.22"
+#define TP_VERSION "0.25"
 #define TP_DESC "ThinkPad SMAPI Support"
 #define TP_DIR "smapi"
 
@@ -63,17 +63,14 @@ MODULE_PARM_DESC(debug, "Debug level (0=off, 1=on)");
 
 #define DPRINTK(fmt, args...) { if (tp_debug) printk(TP_DEBUG fmt, ## args); }
 
-/* provide smapi/cd_speed? redundant and dangerous - see README */
-/* #define PROVIDE_CD_SPEED  */
-
-
+/* #define PROVIDE_CD_SPEED  */ /* evil - see README */
 
 /*********************************************************************
  * SMAPI interface
  */
 
-/* SMAPI functions (register BX when calling). 
-   For most of these we don't know the exact meaning or arguments. */
+/* SMAPI functions (register BX when making the SMM call). Not all of
+ * these are supported by this driver yet.                             */
 #define SMAPI_GET_LCD_BRIGHTNESS_2              0x1004
 #define SMAPI_SET_LCD_BRIGHTNESS_2              0x1005
 #define SMAPI_GET_DOCKING_OPTION                0x1602
@@ -161,107 +158,94 @@ static int find_smapi_port(void)
 	return port;
 }
 
-/* SMAPI call: invoke SM BIOS */
+/* SMAPI call: invoke SMBIOS. Output args are optional (can be NULL). */
 static int smapi_request(u32 inBX, u32 inCX,
 			 u32 inDI, u32 inSI,
-			 u32 *outAX, u32 *outBX,
-			 u32 *outCX, u32 *outDX,
+			 u32 *outBX, u32 *outCX, u32 *outDX,
 			 u32 *outDI, u32 *outSI, const char** msg)
 {
 	int ret = 0;
 	int i;
-	int retries = SMAPI_MAX_RETRIES;
-	u32 myoutAX, myoutBX, myoutCX, myoutDX, myoutDI, myoutSI;
+	int retries;
 	u8 rc;
+	/* Must use local vars for output regs, due to reg pressure. */
+	u32 tmpAX, tmpBX, tmpCX, tmpDX, tmpDI, tmpSI;
 
-retry:
-	DPRINTK("req_in: BX=%x CX=%x DI=%x SI=%x\n",
-		inBX, inCX, inDI, inSI);
+	for (retries=0; retries<SMAPI_MAX_RETRIES; ++retries) {
+		DPRINTK("req_in: BX=%x CX=%x DI=%x SI=%x\n",
+			inBX, inCX, inDI, inSI);
 
-	/* SMAPI's SMI call and tp_base end up using the same interface 
-	 * (ports 0x1600-0x161F).use different interfaces to the same chip,
-	 * they must be excluded from each other.                          */
-	ret = tp_controller_lock(); 
-	if (ret)
-		return ret;
+		/* SMAPI's SMBIOS call and tp_base end up using use different
+	 	* interfaces to the same chip, so play it safe (necessary?):
+		 */
+		ret = tp_controller_lock(); 
+		if (ret)
+			return ret;
 
-	__asm__ __volatile__(
-		"movl  $0x00005380,%%eax\n\t"
-		"movl  %6,%%ebx\n\t"
-		"movl  %7,%%ecx\n\t"
-		"movl  %8,%%edi\n\t"
-		"movl  %9,%%esi\n\t"
-		"xorl  %%edx,%%edx\n\t"
-		"movw  %10,%%dx\n\t"
-		"out   %%al,%%dx\n\t"  /* trigger SMI to invoke BIOS in SMM */
-		"out   %%al,$0x4F\n\t"
-		"movl  %%eax,%0\n\t"
-		"movl  %%ebx,%1\n\t"
-		"movl  %%ecx,%2\n\t"
-		"movl  %%edx,%3\n\t"
-		"movl  %%edi,%4\n\t"
-		"movl  %%esi,%5\n\t"
-		:"=m"(myoutAX),
-		 "=m"(myoutBX),
-		 "=m"(myoutCX),
-		 "=m"(myoutDX),
-		 "=m"(myoutDI),
-		 "=m"(myoutSI)
-		:"m"(inBX), "m"(inCX), "m"(inDI), "m"(inSI),
-		 "m"((u16)smapi_port)
-		:"%eax", "%ebx", "%ecx", "%edx", "%edi",
-		 "%esi");
+		__asm__ __volatile__(
+			"movl  $0x00005380,%%eax\n\t"
+			"movl  %6,%%ebx\n\t"
+			"movl  %7,%%ecx\n\t"
+			"movl  %8,%%edi\n\t"
+			"movl  %9,%%esi\n\t"
+			"xorl  %%edx,%%edx\n\t"
+			"movw  %10,%%dx\n\t"
+			"out   %%al,%%dx\n\t"  /* trigger SMI to SMBIOS */
+			"out   %%al,$0x4F\n\t"
+			"movl  %%eax,%0\n\t"
+			"movl  %%ebx,%1\n\t"
+			"movl  %%ecx,%2\n\t"
+			"movl  %%edx,%3\n\t"
+			"movl  %%edi,%4\n\t"
+			"movl  %%esi,%5\n\t"
+			:"=m"(tmpAX),
+			 "=m"(tmpBX),
+			 "=m"(tmpCX),
+			 "=m"(tmpDX),
+			 "=m"(tmpDI),
+			 "=m"(tmpSI)
+			:"m"(inBX), "m"(inCX), "m"(inDI), "m"(inSI),
+			 "m"((u16)smapi_port)
+			:"%eax", "%ebx", "%ecx", "%edx", "%edi",
+			 "%esi");
 
-	tp_controller_invalidate();
-	tp_controller_unlock();
+		tp_controller_invalidate();
+		tp_controller_unlock();
 
-	*outAX=myoutAX; *outBX=myoutBX; *outCX=myoutCX;
-	*outDX=myoutDX; *outDI=myoutDI; *outSI=myoutSI;
-
-	/* Look up error code */
-	rc = (myoutAX>>8)&0xFF;
-	for (i=0; smapi_rc[i].rc!=0xFF && smapi_rc[i].rc!=rc; ++i) {}
-	ret = smapi_rc[i].ret;
-	*msg = smapi_rc[i].msg;
-
-	DPRINTK("req_out: AX=%x BX=%x CX=%x DX=%x DI=%x SI=%x ret=%d\n",
-	        *outAX, *outBX, *outCX, *outDX, *outDI, *outSI, ret);
-	if (ret)
-		printk(TP_NOTICE "SMAPI error: %s (func=%x)\n", *msg, inBX);
-
-	if (ret==-EBUSY && --retries) {
-		/* Retry */
-		DPRINTK("retrying (%d left)...\n", retries);
+		/* Don't let the next SMAPI access happen too quickly,
+		 * may case problems. (We're hold smapi_mutex).       */
 		msleep(50);
-		goto retry;
-	}
-	msleep(5); /* Don't let the next access happen too quickly */
-	return ret;
-}
 
-/* Convenience wrapper: make output arguments optional */
-static int smapi_read(u32 inBX, u32 inCX,
-                      u32 inDI, u32 inSI,
-                      u32 *outBX, u32 *outCX, 
-                      u32 *outDX,
-                      u32 *outDI, u32 *outSI,
-                      const char** msg)
-{
-	u32 tmpAX=0, tmpBX=0, tmpCX=0, tmpDX=0, tmpDI=0, tmpSI=0;
-	return smapi_request(inBX, inCX, inDI, inSI, &tmpAX,
-	                     outBX?outBX:&tmpBX, outCX?outCX:&tmpCX,
-	                     outDX?outDX:&tmpDX, outDI?outDI:&tmpDI,
-	                     outSI?outSI:&tmpSI, msg);
+		if (outBX) *outBX = tmpBX;
+		if (outCX) *outCX = tmpCX;
+		if (outDX) *outDX = tmpDX;
+		if (outSI) *outSI = tmpSI;
+		if (outDI) *outDI = tmpDI;
+
+		/* Look up error code */
+		rc = (tmpAX>>8)&0xFF;
+		for (i=0; smapi_rc[i].rc!=0xFF && smapi_rc[i].rc!=rc; ++i) {}
+		ret = smapi_rc[i].ret;
+		*msg = smapi_rc[i].msg;
+
+		DPRINTK("req_out: AX=%x BX=%x CX=%x DX=%x DI=%x SI=%x r=%d\n",
+		         tmpAX, tmpBX, tmpCX, tmpDX, tmpDI, tmpSI, ret);
+		if (ret)
+			printk(TP_NOTICE "SMAPI error: %s (func=%x)\n",
+			       *msg, inBX);
+
+		if (ret!=-EBUSY)
+			return ret;
+	}
+	return ret;
 }
 
 /* Convenience wrapper: discard output arguments */
 static int smapi_write(u32 inBX, u32 inCX,
                        u32 inDI, u32 inSI, const char **msg)
 {
-	u32 outAX=0, outBX=0, outCX, outDX=0, outDI=0, outSI=0;
 	return smapi_request(inBX, inCX, inDI, inSI,
-	                     &outAX, &outBX, &outCX, &outDX, &outDI, &outSI,
-	                     msg);
+	                     NULL, NULL, NULL, NULL, NULL, msg);
 }
 
 
@@ -269,18 +253,21 @@ static int smapi_write(u32 inBX, u32 inCX,
  * ThinkPad controller readout
  */
 
-/* Lock controller and read row */
-static int tpc_read_row(u8 arg0, int bat, u8* dataval) {
+/* Lock controller and read row.
+ * arg0: EC command code.
+ * bat: battery number, 0 or 1. 
+ * j: the byte value to be used for "junk" (unused) outputs.
+ * dataval: result vector.
+ */
+static int tpc_read_row(u8 arg0, int bat, u8 j, u8* dataval) {
 	int ret;
-	struct tp_controller_row args, data;
+	const struct tp_controller_row args = { .mask=0xFFFF,
+		.val={arg0, j,j,j,j,j,j,j,j,j,j,j,j,j,j, (u8)bat} };
+	struct tp_controller_row data = { .mask = 0xFFFF };
 
 	ret = tp_controller_lock();
 	if (ret)
 		return ret;
-	args.val[0x0] = arg0;
-	args.val[0xF] = (u8)bat;
-	args.mask = 0x8001;
-	data.mask = 0xFFFF;
 	ret = tp_controller_read_row(&args, &data);
 	tp_controller_unlock();
 	memcpy(dataval, &data.val, TP_CONTROLLER_ROW_LEN);
@@ -316,7 +303,7 @@ static int get_real_thresh(int bat, int start, int *thresh,
 	u32 bx = start ? SMAPI_GET_THRESH_START : SMAPI_GET_THRESH_STOP;
 	u32 cx = (bat+1)<<8;
 	const char* msg;
-	int ret = smapi_read(bx, cx, 0, 0, NULL, &cx, NULL, outDI, outSI, &msg);
+	int ret = smapi_request(bx, cx, 0, 0, NULL, &cx, NULL, outDI, outSI, &msg);
 	if (ret) {
 		printk(TP_NOTICE "cannot get %s_thresh of battery %d: %s\n", 
 		       start?"start":"stop", bat, msg);
@@ -389,8 +376,8 @@ static int get_inhibit_charge(int bat, int *minutes, u8 *outCL) {
 	u32 cx = (bat+1)<<8;
 	u32 si;
 	const char* msg;
-	int ret = smapi_read(SMAPI_GET_INHIBIT_CHARGE_STATUS, cx, 0, 0, 
-	                     NULL, &cx, NULL, NULL, &si, &msg);
+	int ret = smapi_request(SMAPI_GET_INHIBIT_CHARGE_STATUS, cx, 0, 0, 
+	                        NULL, &cx, NULL, NULL, &si, &msg);
 	if (ret) {
 		printk(TP_NOTICE "cannot get inhibit_charge of battery %d: "
 		       "%s\n", bat, msg);
@@ -438,8 +425,8 @@ static int get_force_discharge(int bat, int *enabled)
 	u32 cx = (bat+1)<<8;
 	const char* msg;
 	int status;
-	int ret = smapi_read(SMAPI_GET_DISCHARGE_STATUS, cx, 0, 0, 
-	                     NULL, &cx, NULL, NULL, NULL, &msg);
+	int ret = smapi_request(SMAPI_GET_DISCHARGE_STATUS, cx, 0, 0, 
+	                        NULL, &cx, NULL, NULL, NULL, &msg);
 	if (ret) {
 		printk(TP_NOTICE
 		       "cannot get force_discharge of battery %d: %s\n", 
@@ -467,8 +454,8 @@ static int set_force_discharge(int bat, int enabled) {
 	u32 cx = (bat+1)<<8;
 	const char* msg;
 	int bit2 = 0; /* what does this input bit mean? */
-	int ret = smapi_read(SMAPI_GET_DISCHARGE_STATUS, cx, 0, 0, 
-	                     NULL, &cx, NULL, NULL, NULL, &msg);
+	int ret = smapi_request(SMAPI_GET_DISCHARGE_STATUS, cx, 0, 0, 
+	                        NULL, &cx, NULL, NULL, NULL, &msg);
 	if (ret) {
 		printk(TP_NOTICE
 		       "cannot get force_discharge of battery %d: %s\n", 
@@ -492,6 +479,52 @@ static int set_force_discharge(int bat, int enabled) {
 	return ret;
 }
 
+/* Get the flag telling the BIOS to enable PCI bus power saving on the next
+ * reboot. */
+static int get_enable_pci_power_saving_on_boot(int *on) {
+	u32 bx, si;
+	const char* msg;
+	int ret = smapi_request(SMAPI_GET_PCI_BUS_POWER_SAVING_OPTION, 0,0,0,
+	                        &bx, NULL, NULL, NULL, &si, &msg);
+	if (ret) {
+		printk(TP_NOTICE
+		       "cannot get enable_pci_power_saving_on_boot: %s\n",
+                       msg);
+		return ret;
+	}
+	if (!(bx & 0x0001)) {
+		printk(TP_NOTICE "enable_pci_power_saving_on_boot: "
+		       " got unknown status bx==0x%x si==0x%x\n",
+                       bx, si);
+		return -EIO;
+	}
+	*on = si & 0x0001;
+	return 0;	
+}
+
+/* Set the flag telling the BIOS to enable PCI bus power saving on the next
+ * reboot.  */
+static int set_enable_pci_power_saving_on_boot(int on) {
+	u32 cx, di, si;
+	const char* msg;
+	int ret = smapi_request(SMAPI_GET_PCI_BUS_POWER_SAVING_OPTION, 0,0,0,
+	                        NULL, &cx, NULL, &di, &si, &msg);
+	if (ret) {
+		printk(TP_NOTICE
+		       "cannot get enable_pci_power_saving_on_boot: %s\n",
+                       msg);
+		return ret;
+	}
+	si = (si & 0xFFFE) | (on ? 0x0001 : 0x0000);
+	ret = smapi_write(SMAPI_SET_PCI_BUS_POWER_SAVING_OPTION,
+	                  cx, di, si, &msg);
+	if (ret) {
+		printk(TP_NOTICE
+		       "cannot set enable_pci_power_saving_on_boot: %s\n",
+                       msg);
+	}
+	return ret;
+}
 
 /*********************************************************************
  * Specific ThinkPad controller services
@@ -500,7 +533,7 @@ static int set_force_discharge(int bat, int enabled) {
 static int is_battery_installed(int bat) {
 	u8 row[TP_CONTROLLER_ROW_LEN];
 	u8 mask;
-	int ret = tpc_read_row(1, bat, row);
+	int ret = tpc_read_row(1, bat, 0, row);
 	if (ret)
 		return ret;
 	if (bat==0)
@@ -514,7 +547,7 @@ static int is_battery_installed(int bat) {
 
 static int bat_has_extended_status(int bat) {
 	u8 row[TP_CONTROLLER_ROW_LEN];
-	int ret = tpc_read_row(1, bat, row);
+	int ret = tpc_read_row(1, bat, 0, row);
 	if (ret)
 		return ret;
 	if ((row[0] & (bat?0x20:0x40)) == 0)
@@ -529,8 +562,8 @@ static int bat_has_extended_status(int bat) {
 static int get_cd_speed(int *speed) {
 	const char* msg;
 	u32 bx, dx, di;
-	int ret = smapi_read(SMAPI_GET_CDROM_STATUS, 0, 0, 0, 
-	                     &bx, NULL, &dx, &di, NULL, &msg);
+	int ret = smapi_request(SMAPI_GET_CDROM_STATUS, 0, 0, 0, 
+	                        &bx, NULL, &dx, &di, NULL, &msg);
 	if (ret) {
 		printk(TP_NOTICE "cannot get cd speed: %s\n", msg);
 		return ret;
@@ -574,7 +607,7 @@ static int set_cd_speed(int speed) {
 
 
 /*********************************************************************
- * proc file read/write routines 
+ * sysfs attribute I/O for batteries
  */
 
 /* Define custom device attribute struct which adds a battery number */
@@ -583,26 +616,52 @@ struct bat_device_attribute {
 	int bat;
 };
 
-/* Functions to parse and format controller readouts */
+/* Some utility functions to parse and format controller readouts: */
 
+/* Get battery to which the attribute belongs */
 static int attr_get_bat(struct device_attribute *attr) {
 	return container_of(attr, struct bat_device_attribute, dev_attr)->bat;
 }
 
-static int show_tpc_bat_word(const char* fmt, u8 arg0, int off,
-                             struct device_attribute *attr, char *buf)
+/* Read a 16-bit value from EC battery status data */
+static int get_tpc_bat_16(u8 arg0, int off, struct device_attribute *attr, u16 *val)
 {
 	u8 row[TP_CONTROLLER_ROW_LEN];
 	int bat = attr_get_bat(attr);
 	int ret;
 	if (bat_has_extended_status(bat)!=1) 
 		return -ENXIO;
-	ret = tpc_read_row(arg0, bat, row);
+	ret = tpc_read_row(arg0, bat, 0, row);
 	if (ret)
 		return ret;
-	return sprintf(buf, fmt, (int)*(u16*)(row+off));
+	*val = *(u16*)(row+off);
+	return 0;
 }
 
+/* Show an unsigned 16-bit value from EC battery status data,
+ * after multiplying it by by the given factor.                   */
+static int show_tpc_bat_u16(u8 arg0, int off, int factor,
+                            struct device_attribute *attr, char *buf)
+{
+	u16 val;
+	int ret = get_tpc_bat_16(arg0, off, attr, &val);
+	if (ret)
+		return ret;
+	return sprintf(buf, "%u\n", factor*(unsigned int)val);
+}
+
+/* Show a signed 16-bit value from EC battery status data */
+static int show_tpc_bat_s16(u8 arg0, int off,
+                            struct device_attribute *attr, char *buf)
+{
+	u16 val;
+	int ret = get_tpc_bat_16(arg0, off, attr, &val);
+	if (ret)
+		return ret;
+	return sprintf(buf, "%d\n", (s16)val);
+}
+
+/* Show a string from EC battery status data */
 static int show_tpc_bat_str(u8 arg0, int off, int maxlen,
                             struct device_attribute *attr, char *buf)
 {
@@ -611,7 +670,7 @@ static int show_tpc_bat_str(u8 arg0, int off, int maxlen,
 	int ret;
 	if (bat_has_extended_status(bat)!=1) 
 		return -ENXIO;
-	ret = tpc_read_row(arg0, bat, row);
+	ret = tpc_read_row(arg0, bat, 0, row);
 	if (ret)
 		return ret;
 	strncpy(buf, (char*)row+off, maxlen);
@@ -620,6 +679,8 @@ static int show_tpc_bat_str(u8 arg0, int off, int maxlen,
 	return strlen(buf);
 }
 
+/* Show a power readout from EC battery status data, after
+ * computing it as current*voltage.                              */
 static int show_tpc_bat_power(u8 arg0, int offV, int offA,
                               struct device_attribute *attr, char *buf)
 {
@@ -628,14 +689,15 @@ static int show_tpc_bat_power(u8 arg0, int offV, int offA,
 	int bat = attr_get_bat(attr);
 	if (bat_has_extended_status(bat)!=1) 
 		return -ENXIO;
-	ret = tpc_read_row(1, bat, row);
+	ret = tpc_read_row(1, bat, 0, row);
 	if (ret)
 		return ret;
 	millivolt = *(u16*)(row+offV);
 	milliamp = *(s16*)(row+offA);
-	return sprintf(buf, "%d mW\n", milliamp*millivolt/1000);
+	return sprintf(buf, "%d\n", milliamp*millivolt/1000); /* type: mW */
 }
 
+/* Decode and show a date from EC battery status data */
 static int show_tpc_bat_date(u8 arg0, int off,
                              struct device_attribute *attr, char *buf)
 {
@@ -646,7 +708,7 @@ static int show_tpc_bat_date(u8 arg0, int off,
 	int bat = attr_get_bat(attr);
 	if (bat_has_extended_status(bat)!=1) 
 		return -ENXIO;
-	ret = tpc_read_row(arg0, bat, row);
+	ret = tpc_read_row(arg0, bat, 0, row);
 	if (ret)
 		return ret;
 
@@ -663,30 +725,29 @@ static int show_tpc_bat_date(u8 arg0, int off,
 /* The actual attribute show/store functions */
 
 static int battery_start_charge_thresh_show(struct device *dev, 
-                                    struct device_attribute *attr, char *buf)
+	struct device_attribute *attr, char *buf)
 {
 	int thresh;
 	int bat = attr_get_bat(attr);
 	int ret = get_thresh(bat, THRESH_START, &thresh);
 	if (ret)
 		return ret;
-	return sprintf(buf, "%d\n", thresh);
+	return sprintf(buf, "%d\n", thresh);  /* type: percent */
 }
 
 static int battery_stop_charge_thresh_show(struct device *dev, 
-                                   struct device_attribute *attr, char *buf)
+	struct device_attribute *attr, char *buf)
 {
 	int thresh;
 	int bat = attr_get_bat(attr);
 	int ret = get_thresh(bat, THRESH_STOP, &thresh);
 	if (ret)
 		return ret;
-	return sprintf(buf, "%d\n", thresh);
+	return sprintf(buf, "%d\n", thresh);  /* type: percent */
 }
 
 static int battery_start_charge_thresh_store(struct device *dev, 
-                                     struct device_attribute *attr, 
-                                     const char *buf, size_t count)
+	struct device_attribute *attr, const char *buf, size_t count)
 {
 	int thresh, other_thresh, ret;
 	int bat = attr_get_bat(attr);
@@ -726,8 +787,7 @@ out:
 }
 
 static int battery_stop_charge_thresh_store(struct device *dev,
-                                    struct device_attribute *attr,
-                                    const char *buf, size_t count)
+	struct device_attribute *attr, const char *buf, size_t count)
 {
 	int thresh, other_thresh, ret;
 	int bat = attr_get_bat(attr);
@@ -765,14 +825,14 @@ out:
 }
 
 static int battery_inhibit_charge_minutes_show(struct device *dev, 
-                               struct device_attribute *attr, char *buf)
+	struct device_attribute *attr, char *buf)
 {
 	int minutes;
 	int bat = attr_get_bat(attr);
 	int ret = get_inhibit_charge(bat, &minutes, NULL);
 	if (ret)
 		return ret;
-	return sprintf(buf, "%d\n", minutes);
+	return sprintf(buf, "%d\n", minutes);  /* type: minutes */
 }
 
 static int battery_inhibit_charge_minutes_store(struct device *dev, 
@@ -795,20 +855,19 @@ static int battery_inhibit_charge_minutes_store(struct device *dev,
 	return count;
 }
 
-static int battery_force_discharge_show(struct device *dev, 
-                                struct device_attribute *attr, char *buf)
+static int battery_force_discharge_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
 {
 	int enabled;
 	int bat = attr_get_bat(attr);
 	int ret = get_force_discharge(bat, &enabled);
 	if (ret)
 		return ret;
-	return sprintf(buf, "%d\n", enabled);
+	return sprintf(buf, "%d\n", enabled);  /* type: boolean */
 }
 
 static int battery_force_discharge_store(struct device *dev,
-                                 struct device_attribute *attr,
-                                 const char *buf, size_t count)
+        struct device_attribute *attr, const char *buf, size_t count)
 {
 	int ret;
 	int enabled;
@@ -830,7 +889,7 @@ static int battery_installed_show(
 	int ret = is_battery_installed(bat);
 	if (ret<0)
 		return ret;
-	return sprintf(buf, "%d\n", ret);
+	return sprintf(buf, "%d\n", ret); /* type: boolean */
 }
 
 static int battery_state_show(
@@ -842,7 +901,7 @@ static int battery_state_show(
 	int bat = attr_get_bat(attr);
 	if (bat_has_extended_status(bat)!=1) 
 		return sprintf(buf, "none\n");
-	ret = tpc_read_row(1, bat, row);
+	ret = tpc_read_row(1, bat, 0, row);
 	if (ret)
 		return ret;
 	switch (row[1] & 0xf0) {
@@ -851,15 +910,7 @@ static int battery_state_show(
 		case 0xe0: msg = "charging"; break;
 		default:   return sprintf(buf, "unknown (0x%x)\n", row[1]);
 	}
-	return sprintf(buf, "%s\n", msg);
-}
-static int ac_connected_show(
-	struct device *dev, struct device_attribute *attr, char *buf)
-{
-	int ret = is_battery_installed(0xFF);
-	if (ret<0)
-		return ret;
-	return sprintf(buf, "%d\n", ret);
+	return sprintf(buf, "%s\n", msg);  /* type: string */
 }
 
 static int battery_manufacturer_show(
@@ -889,110 +940,203 @@ static int battery_chemistry_show(
 static int battery_voltage_show(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
-	return show_tpc_bat_word("%u mV\n", 1, 6, attr, buf);
+	return show_tpc_bat_u16(1, 6, 1, attr, buf);  /* type: mV */
 }
 
 static int battery_design_voltage_show(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
-	return show_tpc_bat_word("%u mV\n", 3, 4, attr, buf);
+	return show_tpc_bat_u16(3, 4, 1, attr, buf);  /* type: mV */
 }
 
 static int battery_current_now_show(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
-	return show_tpc_bat_word("%d mA\n", 1, 8, attr, buf);
+	return show_tpc_bat_s16(1, 8, attr, buf);  /* type: mA */
 }
 
 static int battery_current_avg_show(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
-	return show_tpc_bat_word("%d mA\n", 1, 10, attr, buf);
+	return show_tpc_bat_s16(1, 10, attr, buf);  /* type: mA */
 }
 
 static int battery_power_now_show(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
-	return show_tpc_bat_power(1, 6, 8, attr, buf);
+	return show_tpc_bat_power(1, 6, 8, attr, buf); /* type: mW */
 }
 
 static int battery_power_avg_show(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
-	return show_tpc_bat_power(1, 6, 10, attr, buf);
+	return show_tpc_bat_power(1, 6, 10, attr, buf);  /* type: mW */
 }
 
 static int battery_remaining_capacity_show(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
-	return show_tpc_bat_word("%u0 mWh\n", 1, 14, attr, buf);
+	return show_tpc_bat_u16(1, 14, 10, attr, buf); /* type: mWh */
 }
 
 static int battery_last_full_capacity_show(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
-	return show_tpc_bat_word("%u0 mWh\n", 2, 2, attr, buf);
+	return show_tpc_bat_u16(2, 2, 10, attr, buf); /* type: mWh */
 }
 
 static int battery_design_capacity_show(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
-	return show_tpc_bat_word("%u0 mWh\n", 3, 2, attr, buf);
+	return show_tpc_bat_u16(3, 2, 10, attr, buf); /* type: mWh */
 }
 
 static int battery_cycle_count_show(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
-	return show_tpc_bat_word("%u\n", 2, 12, attr, buf);
+	return show_tpc_bat_u16(2, 12, 1, attr, buf); /* type: ordinal */
 }
 
 static int battery_serial_show(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
-	return show_tpc_bat_word("%u\n", 3, 10, attr, buf);
+	return show_tpc_bat_u16(3, 10, 1, attr, buf); /* type: ordinal */
 }
 
 static int battery_manufacture_date_show(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
-	return show_tpc_bat_date(3, 8, attr, buf);
+	return show_tpc_bat_date(3, 8, attr, buf); /* type: YYYY-MM-DD */
 }
 
 static int battery_first_use_date_show(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
-	return show_tpc_bat_date(8, 2, attr, buf);
+	return show_tpc_bat_date(8, 2, attr, buf); /* type: YYYY-MM-DD */
 }
 
 static int battery_dump_show(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
-	int j;
+	int i;
 	char* p = buf;
 	int bat = attr_get_bat(attr);
 	u8 arg0;
-	u8 row[TP_CONTROLLER_ROW_LEN];
+	u8 rowa[TP_CONTROLLER_ROW_LEN], rowb[TP_CONTROLLER_ROW_LEN];
+	const u8 junka=0xAA, junkb=0x55; /* junk values for testing changes */
 	int ret;
 
-	for (arg0=1; arg0<=8; ++arg0) {
-		ret = tpc_read_row(arg0, bat, row);
+	for (arg0=0x00; arg0<=0x0b; ++arg0) {
+		/* Read raw twice with different junk values,
+		  * to detect unused output bytes which are left unchaged: */
+		ret = tpc_read_row(arg0, bat, junka, rowa);
 		if (ret)
 			return ret;
-		for (j=0; j<TP_CONTROLLER_ROW_LEN; j++)
-			p += sprintf(p, "%02x ", row[j]);
-		p += sprintf(p, "\n");
-		if (arg0==1 && bat_has_extended_status(bat)!=1)
-			goto done;
-		if ( (p-buf)>PAGE_SIZE-256 ) {
-			printk(TP_ERR "aps_dump_show: too much output!\n");
-			return -EIO;
+		ret = tpc_read_row(arg0, bat, junkb, rowb);
+		if (ret)
+			return ret;
+		for (i=0; i<TP_CONTROLLER_ROW_LEN; i++) {
+			if (rowa[i]==junka && rowb[i]==junkb)
+				p += sprintf(p, "-- ");
+			else
+				p += sprintf(p, "%02x ", rowa[i]);
 		}
+		p += sprintf(p, "\n");
+		if ( (p-buf)>PAGE_SIZE-256 )
+			return -ENOMEM;
 	}
-done:
 	return p-buf;
 }
 
+
+/*********************************************************************
+ * sysfs attribute I/O, other than batteries
+ */
+
+static int ac_connected_show(
+	struct device *dev, struct device_attribute *attr, char *buf)
+{
+	int ret = is_battery_installed(0xFF);
+	if (ret<0)
+		return ret;
+	return sprintf(buf, "%d\n", ret);  /* type: boolean */
+}
+
+static int enable_pci_power_saving_on_boot_show(
+	struct device *dev, struct device_attribute *attr, char *buf)
+{
+	int on;
+	int ret = get_enable_pci_power_saving_on_boot(&on);
+	if (ret)
+		return ret;
+	return sprintf(buf, "%d\n", on);  /* type: boolean */
+}
+
+static int enable_pci_power_saving_on_boot_store(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t count)
+{
+	int ret;
+	int on;
+	if (sscanf(buf, "%d", &on)!=1 || on&(~1)) {
+		printk(TP_ERR 
+		       "enable_pci_power_saving_on_boot: must be 0 or 1\n");
+		return -EINVAL;
+	}
+	ret = set_enable_pci_power_saving_on_boot(on);
+	if (ret)
+		return ret;
+	return count;
+}
+
+/*********************************************************************
+ * The the "smapi_request" sysfs attribute executes a raw SMAPI call.
+ * You write to make a request and read to get the result. The state
+ * is saved globally rather than per fd (sysfs limitation), so 
+ * simultaenous requests may get each other's results! So this is for
+ * development and debugging only.
+ */
+#define MAX_SMAPI_ANSWER_STR 128
+static char smapi_attr_answer[MAX_SMAPI_ANSWER_STR] = "";
+
+static int smapi_request_show(struct device *dev, 
+                              struct device_attribute *attr, char *buf)
+{
+	int ret = snprintf(buf, PAGE_SIZE, "%s", smapi_attr_answer);
+	smapi_attr_answer[0] = '\0';
+	return ret;
+}
+
+static int smapi_request_store(struct device *dev, 
+                               struct device_attribute *attr,
+                               const char *buf, size_t count)
+{
+	unsigned int inBX, inCX, inDI, inSI;
+	u32 outBX, outCX, outDX, outDI, outSI;
+	const char* msg;
+	int ret;
+	if (sscanf(buf, "BX=%x CX=%x DI=%x SI=%x", &inBX, &inCX, &inDI, &inSI) != 4) {
+		smapi_attr_answer[0] = '\0';
+		return -EINVAL;
+	}
+	ret = smapi_request(
+	           inBX, inCX, inDI, inSI,
+	           &outBX, &outCX, &outDX, &outDI, &outSI, &msg);
+	snprintf(smapi_attr_answer, MAX_SMAPI_ANSWER_STR,
+	         "BX=%x CX=%x DX=%x DI=%x SI=%x ret=%d msg=%s\n",
+	         (unsigned int)outBX, (unsigned int)outCX, (unsigned int)outDX, 
+	         (unsigned int)outDI, (unsigned int)outSI, ret, msg);
+	if (ret)
+		return ret;
+	else
+		return count;
+}
+
+
 #ifdef PROVIDE_CD_SPEED
+/*********************************************************************
+ * Optical drive speed setting. This should be done by the ATAPI 
+ * driver instead, and may get in the ATAPI driver's way.
+ */
 
 static int cd_speed_show(struct device *dev, 
                          struct device_attribute *attr, char *buf)
@@ -1081,15 +1225,24 @@ static struct platform_driver tp_driver = {
  */
 
 /* Attributes in /sys/devices/platform/smapi/ */
+
+static DEVICE_ATTR(ac_connected, 0444, ac_connected_show, NULL);
+static DEVICE_ATTR(enable_pci_power_saving_on_boot, 0644,
+                   enable_pci_power_saving_on_boot_show,
+                   enable_pci_power_saving_on_boot_store);
+static DEVICE_ATTR(smapi_request, 0600, smapi_request_show,
+                                        smapi_request_store);
 #ifdef PROVIDE_CD_SPEED
 static DEVICE_ATTR(cd_speed, 0644, cd_speed_show, cd_speed_store);
 #endif
-static DEVICE_ATTR(ac_connected, 0644, ac_connected_show, NULL);
+
 static struct attribute *tp_root_attributes[] = {
+	&dev_attr_ac_connected.attr,
+	&dev_attr_enable_pci_power_saving_on_boot.attr,
+	&dev_attr_smapi_request.attr,
 #ifdef PROVIDE_CD_SPEED
 	&dev_attr_cd_speed.attr,
 #endif
-	&dev_attr_ac_connected.attr,
 	NULL
 };
 static struct attribute_group tp_root_attribute_group = {
@@ -1099,81 +1252,73 @@ static struct attribute_group tp_root_attribute_group = {
 /* Attributes under /sys/devices/platform/smapi/BAT{0,1}/ :
  * Every attribute needs to be defined (i.e., statically allocated) for
  * each battery, and then referenced in the attribute list of each battery.
- * We use preprocessor voodoo to avoid duplicating the list of attributes.
+ * We use preprocessor voodoo to avoid duplicating the list of attributes 
+ * 4 times. The final result is just normal sysfs attributes..
  */
 
 /* This macro processes all attributes via the given "functions" args: */
 
-#define DO_BAT_ATTRS(_bat, _ATTR_RW, _ATTR_R) \
-	_ATTR_RW(_bat, start_charge_thresh) \
-	_ATTR_RW(_bat, stop_charge_thresh) \
-	_ATTR_RW(_bat, inhibit_charge_minutes) \
-	_ATTR_RW(_bat, force_discharge) \
-	_ATTR_R (_bat, installed) \
-	_ATTR_R (_bat, state) \
-	_ATTR_R (_bat, manufacturer) \
-	_ATTR_R (_bat, model) \
-	_ATTR_R (_bat, barcoding) \
-	_ATTR_R (_bat, chemistry) \
-	_ATTR_R (_bat, voltage) \
-	_ATTR_R (_bat, current_now) \
-	_ATTR_R (_bat, current_avg) \
-	_ATTR_R (_bat, power_now) \
-	_ATTR_R (_bat, power_avg) \
-	_ATTR_R (_bat, remaining_capacity) \
-	_ATTR_R (_bat, last_full_capacity) \
-	_ATTR_R (_bat, design_voltage) \
-	_ATTR_R (_bat, design_capacity) \
-	_ATTR_R (_bat, cycle_count) \
-	_ATTR_R (_bat, serial) \
-	_ATTR_R (_bat, manufacture_date) \
-	_ATTR_R (_bat, first_use_date) \
-	_ATTR_R (_bat, dump)
+#define FOREACH_BAT_ATTR(_BAT, _ATTR_RW, _ATTR_R) \
+	_ATTR_RW(_BAT, start_charge_thresh) \
+	_ATTR_RW(_BAT, stop_charge_thresh) \
+	_ATTR_RW(_BAT, inhibit_charge_minutes) \
+	_ATTR_RW(_BAT, force_discharge) \
+	_ATTR_R (_BAT, installed) \
+	_ATTR_R (_BAT, state) \
+	_ATTR_R (_BAT, manufacturer) \
+	_ATTR_R (_BAT, model) \
+	_ATTR_R (_BAT, barcoding) \
+	_ATTR_R (_BAT, chemistry) \
+	_ATTR_R (_BAT, voltage) \
+	_ATTR_R (_BAT, current_now) \
+	_ATTR_R (_BAT, current_avg) \
+	_ATTR_R (_BAT, power_now) \
+	_ATTR_R (_BAT, power_avg) \
+	_ATTR_R (_BAT, remaining_capacity) \
+	_ATTR_R (_BAT, last_full_capacity) \
+	_ATTR_R (_BAT, design_voltage) \
+	_ATTR_R (_BAT, design_capacity) \
+	_ATTR_R (_BAT, cycle_count) \
+	_ATTR_R (_BAT, serial) \
+	_ATTR_R (_BAT, manufacture_date) \
+	_ATTR_R (_BAT, first_use_date) \
+	_ATTR_R (_BAT, dump)
 
-/* Now define the macro "functions" for DO_BAT_ATTRS: */
+/* Now define several macro "functions" for FOREACH_BAT_ATTR: */
 
-#define BAT_DEVICE_ATTR(_name,_bat,_mode,_show,_store) \
-	struct bat_device_attribute dev_attr_##_name##_##_bat = { \
-		.dev_attr = __ATTR(_name,_mode,_show,_store), \
-		.bat = _bat \
+#define DEFINE_BAT_ATTR_RW(_BAT,_NAME) \
+	static struct bat_device_attribute dev_attr_##_NAME##_##_BAT = {  \
+		.dev_attr = __ATTR(_NAME, 0644, battery_##_NAME##_show,   \
+		                                battery_##_NAME##_store), \
+		.bat = _BAT \
 	};
 
-#define DEF_BAT_ATTR_RW(_bat,_name) \
-	static BAT_DEVICE_ATTR(_name, _bat, 0644, \
-	                       battery_##_name##_show, \
-	                       battery_##_name##_store);
+#define DEFINE_BAT_ATTR_R(_BAT,_NAME) \
+	static struct bat_device_attribute dev_attr_##_NAME##_##_BAT = {    \
+		.dev_attr = __ATTR(_NAME, 0644, battery_##_NAME##_show, 0), \
+		.bat = _BAT \
+	};
 
-#define DEF_BAT_ATTR_R(_bat,_name) \
-	static BAT_DEVICE_ATTR(_name, _bat, 0444, \
-	                       battery_##_name##_show, NULL);
+#define REF_BAT_ATTR(_BAT,_NAME) \
+	&dev_attr_##_NAME##_##_BAT.dev_attr.attr,
 
-#define REF_BAT_ATTR(_bat,_name) \
-	&dev_attr_##_name##_##_bat.dev_attr.attr,
+/* This provide attributes for one battery: */
 
+#define PROVIDE_BAT_ATTRS(_BAT) \
+	FOREACH_BAT_ATTR(_BAT, DEFINE_BAT_ATTR_RW, DEFINE_BAT_ATTR_R) \
+	static struct attribute *tp_bat##_BAT##_attributes[] = { \
+		FOREACH_BAT_ATTR(_BAT, REF_BAT_ATTR, REF_BAT_ATTR) \
+		NULL \
+	}; \
+	static struct attribute_group tp_bat##_BAT##_attribute_group = { \
+		.name  = "BAT" #_BAT, \
+		.attrs = tp_bat##_BAT##_attributes \
+	};
 
-/* Battery 0 */
+/* Finally genereate the attributes: */
 
-DO_BAT_ATTRS(0, DEF_BAT_ATTR_RW, DEF_BAT_ATTR_R)
-static struct attribute *tp_bat0_attributes[] = {
-	DO_BAT_ATTRS(0, REF_BAT_ATTR, REF_BAT_ATTR)
-	NULL
-};
-static struct attribute_group tp_bat0_attribute_group = {
-	.name  = "BAT0",
-	.attrs = tp_bat0_attributes
-};
-
-/* Battery 1 */
-
-DO_BAT_ATTRS(1, DEF_BAT_ATTR_RW, DEF_BAT_ATTR_R)
-static struct attribute *tp_bat1_attributes[] = {
-	DO_BAT_ATTRS(1, REF_BAT_ATTR, REF_BAT_ATTR)
-	NULL
-};
-static struct attribute_group tp_bat1_attribute_group = {
-	.name  = "BAT1",
-	.attrs = tp_bat1_attributes
-};
+PROVIDE_BAT_ATTRS(0)
+PROVIDE_BAT_ATTRS(1)
 
 /* List of attribute groups */
 

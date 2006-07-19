@@ -36,7 +36,7 @@
 #include <linux/jiffies.h>
 #include <asm/io.h>
 
-#define TP_VERSION "0.22"
+#define TP_VERSION "0.25"
 
 MODULE_AUTHOR("Shem Multinymous");
 MODULE_DESCRIPTION("ThinkPad embedded controller hardware access");
@@ -83,12 +83,16 @@ MODULE_PARM_DESC(debug, "Debug level (0=off, 1=on)");
 static u8 prefetch_arg0, prefetch_argF;           /* Args of last prefetch */
 static u64 prefetch_jiffies;                      /* time of prefetch, or: */
 #define TPC_PREFETCH_NONE   INITIAL_JIFFIES       /* - No prefetch */
-#define TPC_PREFETCH_JUNK   INITIAL_JIFFIES+1     /* - Ignore prefetch */
+#define TPC_PREFETCH_JUNK   (INITIAL_JIFFIES+1)   /* - Ignore prefetch */
 
 /* Locking: */
 
 static DECLARE_MUTEX(tp_controller_mutex);
 
+/* tp_controller_lock:
+ * Get exclusive lock for accesing the controller. May sleep.
+ * Returns 0 iff lock acquired .
+ */
 int tp_controller_lock(void) 
 {
 	int ret;
@@ -100,6 +104,10 @@ int tp_controller_lock(void)
 
 EXPORT_SYMBOL_GPL(tp_controller_lock); 
 
+/* tp_controller_try_lock:
+ * Get exclusive lock for accesing the controller but only if it's available.
+ * Does not block, does not sleep. Returns 0 iff lock acquired .
+ */
 int tp_controller_try_lock(void) 
 {
 	return down_trylock(&tp_controller_mutex);
@@ -107,6 +115,9 @@ int tp_controller_try_lock(void)
 
 EXPORT_SYMBOL_GPL(tp_controller_try_lock); 
 
+/* tp_controller_unlock:
+ * Release a previously acquired controller lock.
+ */
 void tp_controller_unlock(void) 
 {
  	up(&tp_controller_mutex);
@@ -115,7 +126,7 @@ void tp_controller_unlock(void)
 EXPORT_SYMBOL_GPL(tp_controller_unlock);
 
 /* Tell embedded controller to prepare a row */
-static int tp_controller_request_row(struct tp_controller_row *args) 
+static int tp_controller_request_row(const struct tp_controller_row *args) 
 {
 	u8 str3;
 	int i;
@@ -125,10 +136,6 @@ static int tp_controller_request_row(struct tp_controller_row *args)
 		printk(KERN_ERR MSG_FMT("bad args->mask=0x%02x", args->mask));
 		return -EINVAL;
 	}
-
-	/* EC protocol requires write to TWR15. Default to 0x01: */
-	if (!(args->mask & 0x8000))
-		args->val[0xF] = 0x01;
 
 	/* Check initial STR3 status: */
 	str3 = inb(TPC_STR3_PORT) & H8S_STR3_MASK;
@@ -161,8 +168,8 @@ static int tp_controller_request_row(struct tp_controller_row *args)
 		if ((args->mask>>i)&1)
 			outb(args->val[i], TPC_TWR0_PORT+i);
 
-	/* Send TWR15. This marks end of command. */
-	outb(args->val[0xF], TPC_TWR15_PORT);
+	/* Send TWR15 (default to 0x01). This marks end of command. */
+	outb((args->mask & 0x8000) ? args->val[0xF] : 0x01, TPC_TWR15_PORT);
 
 	/* Wait until EC starts writing its reply (~60ns on average).
 	 * Releasing locks before this happens may cause an EC hang
@@ -227,7 +234,7 @@ static int tp_controller_read_data(struct tp_controller_row *data)
 /* Is the given row currently prefetched? 
  * To keep things simple we compare only the first and last args;
  * in practice this suffices                                        .*/
-static int tp_controller_is_row_fetched(struct tp_controller_row *args)
+static int tp_controller_is_row_fetched(const struct tp_controller_row *args)
 {
 	return (prefetch_jiffies != TPC_PREFETCH_NONE) &&
 	       (prefetch_jiffies != TPC_PREFETCH_JUNK) &&
@@ -236,8 +243,18 @@ static int tp_controller_is_row_fetched(struct tp_controller_row *args)
 	       (get_jiffies_64() < prefetch_jiffies + TPC_PREFETCH_TIMEOUT);
 }
 
-/* Read a row from the embedded controller */
-int tp_controller_read_row(struct tp_controller_row *args,
+/* tp_controller_read_row:
+ * Read a data row from the controller, fetching and retrying if needed.
+ * The row args are specified by 16 byte arguments, some of which may be 
+ * missing (but the first and last are mandatory). These are given in 
+ * args->val[],   args->val[i] is used iff (args->mask>>i)&1).
+ * The rows's data is stored in data->val[], but is only guaranteed to be 
+ * valid for indices corresponding to set bit in data->maska. That is,
+ * if (data->mask>>i)&1==0 then data->val[i] may not be filled (to save time).
+ * Returns -EBUSY on transient error and -EIO on abnormal condition.
+ * Caller must hold controller lock. 
+ */
+int tp_controller_read_row(const struct tp_controller_row *args,
                            struct tp_controller_row *data)
 {
 	int retries, ret;
@@ -277,8 +294,13 @@ out:
 
 EXPORT_SYMBOL_GPL(tp_controller_read_row);
 
-/* Read a prefetched row from the controller. Don't fetch, don't retry. */
-int tp_controller_try_read_row(struct tp_controller_row *args,
+/* tp_controller_try_read_row:
+ * Try read a prefetched row from the controller. Don't fetch or retry.
+ * See tp_controller_read_row above for the meaning of the arguments.
+ * Returns -EBUSY is data not ready and -ENODATA if row not prefetched.
+ * Caller must hold controller lock. 
+ */
+int tp_controller_try_read_row(const struct tp_controller_row *args,
                                struct tp_controller_row *data)
 {
 	int ret;
@@ -294,10 +316,16 @@ int tp_controller_try_read_row(struct tp_controller_row *args,
 
 EXPORT_SYMBOL_GPL(tp_controller_try_read_row);
 
-/* Prefech a row from the controller. This is a one-shot prefetch
- * attempt, without retries or delays.
+/* tp_controller_prefetch_row:
+ * Prefetch data row from the controller. A subsequent call to
+ * tp_controller_read_row() with the same arguments will be faster,
+ * and a subsequent call to tp_controller_try_read_row stands a 
+ * good chance of succeeding if done neither too soon nor too late.
+ * See tp_controller_read_row above for the meaning of the arguments.
+ * Returns -EBUSY on transient error and -EIO on abnormal condition.
+ * Caller must hold controller lock.
  */
-int tp_controller_prefetch_row(struct tp_controller_row *args)
+int tp_controller_prefetch_row(const struct tp_controller_row *args)
 {
 	int ret;
  	ret = tp_controller_request_row(args);
@@ -313,6 +341,11 @@ int tp_controller_prefetch_row(struct tp_controller_row *args)
 
 EXPORT_SYMBOL_GPL(tp_controller_prefetch_row);
 
+/* tp_controller_invalidate:
+ * Invalidate the prefetched controller data.
+ * Must be called before unlocking by any code that accesses the controller
+ * ports directly.
+ */
 void tp_controller_invalidate(void) 
 {
 	prefetch_jiffies = TPC_PREFETCH_JUNK;
@@ -320,6 +353,22 @@ void tp_controller_invalidate(void)
 
 EXPORT_SYMBOL_GPL(tp_controller_invalidate);
 
+/* tp_controller_test:
+ * Ensure the EC LPC3 channel really exists on this machine by making
+ * an arbitrary harmless EC request and seeing if the EC follows protocol.
+ */
+static int tp_controller_test(void) {
+	int ret;
+	const struct tp_controller_row args = /* battery 0 basic status */
+	  { .mask=0x8001, .val={0x01,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0x00} };
+	struct tp_controller_row data = { .mask = 0x0000 };
+	ret = tp_controller_lock();
+	if (ret)
+		return ret;
+	ret = tp_controller_read_row(&args, &data);
+	tp_controller_unlock();
+	return ret;
+}
 
 /*** Model whitelist ***/
 
@@ -331,43 +380,66 @@ EXPORT_SYMBOL_GPL(tp_controller_invalidate);
 	}						\
 }
 
-static int is_thinkpad(void) 
-{
-	struct dmi_system_id tp_whitelist[] = {
-		TP_DMI_MATCH("LENOVO","ThinkPad"),
-		TP_DMI_MATCH("IBM","ThinkPad"),
-		TP_DMI_MATCH("IBM","Not Available"), /* e.g., ThinkPad R40 */
-		{ .ident = NULL }
-	};
-	return dmi_check_system(tp_whitelist);
+/* Search all DMI device names for a given type for a substrng */
+static int __init dmi_find_substring(int type, const char *substr) {
+	struct dmi_device *dev = NULL;
+	while ((dev = dmi_find_device(type, NULL, dev))) {
+		if (strstr(dev->name, substr))
+			return 1;
+	}
+	return 0;
 }
 
+/* Check DMI for existence of ThinkPad embedded controller */
+static int __init check_for_embedded_controller(void) 
+{
+	/* A few old models that have a good EC but don't report it in DMI */
+	struct dmi_system_id tp_whitelist[] = {
+		TP_DMI_MATCH("IBM","ThinkPad A30"),
+		TP_DMI_MATCH("IBM","ThinkPad T23"),
+		TP_DMI_MATCH("IBM","ThinkPad X24"),
+		{ .ident = NULL }
+	};
+#include "dmi_ec_oem_string.h"
+#ifdef DMI_EC_OEM_STRING_KLUDGE
+	return (strstr(DMI_EC_OEM_STRING_KLUDGE, "IBM ThinkPad Embedded Controller")) ||
+#else
+	return dmi_find_substring(DMI_DEV_TYPE_OEM_STRING,
+	                          "IBM ThinkPad Embedded Controller") ||
+#endif
+	       dmi_check_system(tp_whitelist);
+}
 
 /*** Init and cleanup ***/
 
 static int __init tp_base_init(void)
 {
-	if (!is_thinkpad()) {
-		printk(KERN_ERR "tp_base: not a ThinkPad!\n");
+	if (!check_for_embedded_controller()) {
+		printk(KERN_ERR "tp_base: no ThinkPad embedded controller!\n");
 		return -ENODEV;
 	}
 
-	if (!request_region(TPC_BASE_PORT, 
-	                    TPC_NUM_PORTS , "ThinkPad controller")) {
-		printk(KERN_ERR "tp_base: cannot claim ports %#x-%#x"
-		       " (conflict with old hdaps driver?)\n",
+	if (!request_region(TPC_BASE_PORT, TPC_NUM_PORTS,
+	                    "thinkpad_ec")) 
+	{
+		printk(KERN_ERR "tp_base: cannot claim io ports %#x-%#x\n",
 		       TPC_BASE_PORT,
 		       TPC_BASE_PORT + TPC_NUM_PORTS -1);
 		return -ENXIO;
 	}
 	prefetch_jiffies = TPC_PREFETCH_JUNK;
+	if (tp_controller_test()) {
+		printk(KERN_INFO "tp_base: init test failed\n");
+		release_region(TPC_BASE_PORT, TPC_NUM_PORTS);
+		return -ENXIO;
+	}
 	printk(KERN_INFO "tp_base: tp_base " TP_VERSION " loaded.\n");
 	return 0;
 }
 
 static void __exit tp_base_exit(void)
 {
-	release_region(TPC_BASE_PORT, TPC_NUM_PORTS );
+	release_region(TPC_BASE_PORT, TPC_NUM_PORTS);
 	printk(KERN_INFO "tp_base: unloaded.\n");
 }
 

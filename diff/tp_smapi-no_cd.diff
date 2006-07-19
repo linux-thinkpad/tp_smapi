@@ -1,26 +1,16 @@
---- orig/tp_smapi.c	2006-01-07 20:39:28.000000000 +0200
-+++ no_cd_speed/tp_smapi.c	2006-01-07 21:05:56.000000000 +0200
-@@ -73,9 +73,6 @@
- 
- #define DPRINTK(fmt, args...) { if (tp_debug) printk(TP_DEBUG fmt, ## args); }
- 
--/* provide smapi/cd_speed? redundant and dangerous - see README */
--/* #define PROVIDE_CD_SPEED  */
+--- orig/tp_smapi.c	2006-01-07 20:39:28.000000000 +0000
++++ no_cd_speed/tp_smapi.c	2006-01-07 21:05:56.000000000 +0000
+@@ -66,2 +65,0 @@
+-/* #define PROVIDE_CD_SPEED  */ /* evil - see README */
 -
- 
- /*** SMAPI interface ***/
- 
-@@ -545,53 +542,6 @@
- 	return 1;
- }
- 
+@@ -560,48 +557,0 @@
 -#ifdef PROVIDE_CD_SPEED
 -
 -static int get_cd_speed(int *speed) {
 -	const char* msg;
 -	u32 bx, dx, di;
--	int ret = smapi_read(SMAPI_GET_CDROM_STATUS, 0, 0, 0, 
--	                     &bx, NULL, &dx, &di, NULL, &msg);
+-	int ret = smapi_request(SMAPI_GET_CDROM_STATUS, 0, 0, 0, 
+-	                        &bx, NULL, &dx, &di, NULL, &msg);
 -	if (ret) {
 -		printk(TP_NOTICE "cannot get cd speed: %s\n", msg);
 -		return ret;
@@ -61,14 +51,13 @@
 -}
 -
 -#endif /* PROVIDE_CD_SPEED */
- 
- /*** proc file read/write routines ***/
- 
-@@ -986,36 +937,6 @@
- 	return p-buf;
- }
- 
+-
+@@ -1135,35 +1084,0 @@
 -#ifdef PROVIDE_CD_SPEED
+-/*********************************************************************
+- * Optical drive speed setting. This should be done by the ATAPI 
+- * driver instead, and may get in the ATAPI driver's way.
+- */
 -
 -static int cd_speed_show(struct device *dev, 
 -                         struct device_attribute *attr, char *buf)
@@ -98,21 +87,12 @@
 -
 -#endif /* PROVIDE_CD_SPEED */
 -
-
- /*********************************************************************
-  * Driver model and power management
-@@ -1084,14 +1005,8 @@
- /*** Sysfs device model ***/
- 
- /* Attributes in /sys/devices/platform/smapi/ */
+-
+@@ -1235,3 +1149,0 @@
 -#ifdef PROVIDE_CD_SPEED
 -static DEVICE_ATTR(cd_speed, 0644, cd_speed_show, cd_speed_store);
 -#endif
- static DEVICE_ATTR(ac_connected, 0644, ac_connected_show, NULL);
- static struct attribute *tp_root_attributes[] = {
+@@ -1243,3 +1154,0 @@
 -#ifdef PROVIDE_CD_SPEED
 -	&dev_attr_cd_speed.attr,
 -#endif
- 	&dev_attr_ac_connected.attr,
- 	NULL
- };

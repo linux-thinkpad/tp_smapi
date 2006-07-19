@@ -1,5 +1,100 @@
 Change history for tp_smapi:
 
+0.25 2006-08-03
+---------------------
+- Added new attribute: 
+  /sys/devices/platform/smapi/enable_pci_power_saving_on_boot
+  This controls the "PCI bus power saving" option in the BIOS (takes
+  effect at the next boot).
+- Added new attribute: 
+  /sys/devices/platform/smapi/smapi_request
+  This performs raw SMAPI calls. It uses a bad interface that cannot handle
+  multiple simultaneous accesses. Don't touch it, it's for development only.
+- "make patch" works again. If needed, the resulting patch will include
+  the dmi-decode-and-save-oem-string-information patch.
+- "make load" now gives an informative error if ran as non-root.
+- Makefile: Give nicer error message on kernel <= 2.6.16.
+- Makefile: Verify that /usr/sbin/dmidecode works.
+
+0.24-test3 2006-08-01
+---------------------
+- tp_base: fix compilation error on unpatched kernels.
+
+0.24-test1 2006-07-31
+---------------------
+This is an experimental version with a few quirks necessary for testing new
+code. It's OK to run it yourself to try the new features, but it's not 
+suitable for packaging in distributions. The stable version remains 0.22.
+
+Changes to loading, whitelisting and building:
+- Detection of the embedded controller (needed for all our modules) is now 
+  done according to OEM Strings in the DMI information. If the EC is not
+  mentioned there (you can check it in 'dmidecode' too) you'll get a 
+  "tp_base: no ThinkPad embedded controller!" message in dmesg and the 
+  modules won't load. If tp_smapi used to work and was broken by this,
+  please report. A few known exceptions are already 
+- The above wants the following kernel patch (soon to be included in -mm):
+  diff/dmi-decode-and-save-oem-string-information.patch
+  If this patch is not already applied to the current kernel, the Makefile 
+  and tp_base.c default to an ugly kludge where the DMI information is
+  hardcoded into your driver instead of being read in runtime. You'll get 
+  a warning about it, but it will work nicely. Just don't run the compiled 
+  modules on a different machine. 
+  Sorry for the mess, but we need to exercise the DMI check code.
+- "make patch" is temporarily broken, due to the above.
+- hdaps: Ignore the "initial mode latch" during init, we're not using it and 
+  Lenovo keeps adding new ones.
+
+Changes to hdaps functionality:
+- hdaps: New attribute /sys/devices/platform/hdaps/sampling_rate. 
+  This determines how frequently of accelerometer state refresh, independently
+  of userspace polling (i.e., reading the position attribute more frequently
+  than this will yield duplicate readouts). Default=50.
+- Multiple hdaps applications can now run without stealing each other's data.
+  Set /sys/devices/platform/hdaps/sampling_rate to the highest rate required
+  by any app.
+- hdaps: New attribute /sys/devices/platform/hdaps/oversampling_ratio.
+  When set to X, the embedded controller is told to do physical accelerometer
+  measurements at a rate that is X times higher than the rate at which
+  the driver reads those measurements (i.e., X*sampling_rate). This
+  reduces sample phase difference is, and useful for the running average
+  filter (see next). Default=5.
+- hdaps: New attribute  /sys/devices/platform/hdaps/running_avg_filter_order.
+  When set to X, reported readouts will be the average of the last X physical
+  accelerometer measurements. Current firmware allows 1<=X<=8. Setting to a
+  high value decreases readout fluctuations. The averaging is handled
+  by the embedded controller, so no CPU resources are used. 
+  Default=2 (this implicit in previous versions).
+- hdaps: New attribute  /sys/devices/platform/hdaps/fake_data_mode (write only).
+  If set to 1, enables a test mode where the physical accelerometer readouts
+  are replaced with an incrementing counter. This is useful for checking the
+  regularity of the sampling interval and driver<->userspace communication.
+
+Changes to tp_smapi functionality:
+- tp_smapi: Removed the units ("mV", "mWh" etc.) from all /sys readouts, to
+  follow kernel convention.
+- tp_smapi: /sys/devices/platform/smapi/BAT?/dump now contains additional 
+  data lines (but we don't know what they mean). Default=0.
+- tp_smapi: /sys/devices/platform/smapi/BAT?/dump contains some unused values;
+  they're now omitted (replaced by "--") instead of showing semi-random junk.
+
+Other changes:
+- tp_smapi: fixed signness bug in current_now and current_avg when 
+  discharging (thanks to Pavel Machek!).
+- hdaps: Turn off power and EC polling upon suspend or module unload.
+- hdaps: Check more EC function return values.
+- hdaps: Refactored some functions.
+- tp_base: Test EC on module load and refuse loading if EC not found.
+- tp_base, hdaps, tp_smapi: changed args passing and made it more concise.
+- tp_smapi: cleaned up attribute macros.
+- tp_smapi: cleaned up smapi retry loop.
+- tp_smapi: removed smapi_write and dropped outAX param from smapi_request.
+- tp_smapi: improved comments.
+- tp_base: moved comments from tp_base.h to tp_base.c.
+
+Many of the above changes were suggested or contributed by
+Henrique de Moraes Holschuh.
+
 0.22  2006-07-20
 ----------------
 - hdaps: Added support for X60s (but X axis is still inverted).
