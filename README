@@ -1,4 +1,4 @@
-tp_smapi version 0.25
+tp_smapi version 0.26
 IBM ThinkPad hardware functions driver
 
 Author:  Shem Multinymous <multinymous@gmail.com>
@@ -67,7 +67,7 @@ tp_base module:
 tp_smapi module: 
   debug=1 enables verbose dmesg output.
 
-hdaps module (patched):
+hdaps module (modified version of driver from mainline kernel):
   force=1 forces loading on ThinkPad models that are not whitelisted.
 
 
@@ -237,9 +237,9 @@ tp_smapi.c
 tp_base.*
   tp_base driver module (coordinates hardware access between tp_smapi and 
   hdaps)
-diff/hdaps.diff
-  Patch to make the hdaps driver use tp_base, plus several fixes to vanilla
-  hdaps.c.
+hdaps.c
+  Modified version of hdaps.c driver from mainline kernel, patched to use
+  tp_base and several other improvements.
 diff/dmi-decode-and-save-oem-string-information
   A patch from the kernel -mm series, needed for hardware detection. 
   If you don't have it, "make load" and "make install" will use a workaround

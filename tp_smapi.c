@@ -41,7 +41,7 @@
 #include <asm/uaccess.h>
 #include <asm/io.h>
 
-#define TP_VERSION "0.25"
+#define TP_VERSION "0.26"
 #define TP_DESC "ThinkPad SMAPI Support"
 #define TP_DIR "smapi"
 
@@ -724,7 +724,7 @@ static int show_tpc_bat_date(u8 arg0, int off,
 
 /* The actual attribute show/store functions */
 
-static int battery_start_charge_thresh_show(struct device *dev, 
+static int show_battery_start_charge_thresh(struct device *dev, 
 	struct device_attribute *attr, char *buf)
 {
 	int thresh;
@@ -735,7 +735,7 @@ static int battery_start_charge_thresh_show(struct device *dev,
 	return sprintf(buf, "%d\n", thresh);  /* type: percent */
 }
 
-static int battery_stop_charge_thresh_show(struct device *dev, 
+static int show_battery_stop_charge_thresh(struct device *dev, 
 	struct device_attribute *attr, char *buf)
 {
 	int thresh;
@@ -746,7 +746,7 @@ static int battery_stop_charge_thresh_show(struct device *dev,
 	return sprintf(buf, "%d\n", thresh);  /* type: percent */
 }
 
-static int battery_start_charge_thresh_store(struct device *dev, 
+static int store_battery_start_charge_thresh(struct device *dev, 
 	struct device_attribute *attr, const char *buf, size_t count)
 {
 	int thresh, other_thresh, ret;
@@ -786,7 +786,7 @@ out:
 
 }
 
-static int battery_stop_charge_thresh_store(struct device *dev,
+static int store_battery_stop_charge_thresh(struct device *dev,
 	struct device_attribute *attr, const char *buf, size_t count)
 {
 	int thresh, other_thresh, ret;
@@ -824,7 +824,7 @@ out:
 	return count;
 }
 
-static int battery_inhibit_charge_minutes_show(struct device *dev, 
+static int show_battery_inhibit_charge_minutes(struct device *dev, 
 	struct device_attribute *attr, char *buf)
 {
 	int minutes;
@@ -835,7 +835,7 @@ static int battery_inhibit_charge_minutes_show(struct device *dev,
 	return sprintf(buf, "%d\n", minutes);  /* type: minutes */
 }
 
-static int battery_inhibit_charge_minutes_store(struct device *dev, 
+static int store_battery_inhibit_charge_minutes(struct device *dev, 
                                 struct device_attribute *attr,
                                 const char *buf, size_t count)
 {
@@ -855,7 +855,7 @@ static int battery_inhibit_charge_minutes_store(struct device *dev,
 	return count;
 }
 
-static int battery_force_discharge_show(struct device *dev,
+static int show_battery_force_discharge(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
 	int enabled;
@@ -866,7 +866,7 @@ static int battery_force_discharge_show(struct device *dev,
 	return sprintf(buf, "%d\n", enabled);  /* type: boolean */
 }
 
-static int battery_force_discharge_store(struct device *dev,
+static int store_battery_force_discharge(struct device *dev,
         struct device_attribute *attr, const char *buf, size_t count)
 {
 	int ret;
@@ -882,7 +882,7 @@ static int battery_force_discharge_store(struct device *dev,
 	return count;
 }
 
-static int battery_installed_show(
+static int show_battery_installed(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
 	int bat = attr_get_bat(attr);
@@ -892,7 +892,7 @@ static int battery_installed_show(
 	return sprintf(buf, "%d\n", ret); /* type: boolean */
 }
 
-static int battery_state_show(
+static int show_battery_state(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
 	u8 row[TP_CONTROLLER_ROW_LEN];
@@ -913,109 +913,109 @@ static int battery_state_show(
 	return sprintf(buf, "%s\n", msg);  /* type: string */
 }
 
-static int battery_manufacturer_show(
+static int show_battery_manufacturer(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
 	return show_tpc_bat_str(4, 2, TP_CONTROLLER_ROW_LEN-2, attr, buf);
 }
 
-static int battery_model_show(
+static int show_battery_model(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
 	return show_tpc_bat_str(5, 2, TP_CONTROLLER_ROW_LEN-2, attr, buf);
 }
 
-static int battery_barcoding_show(
+static int show_battery_barcoding(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
 	return show_tpc_bat_str(7, 2, TP_CONTROLLER_ROW_LEN-2, attr, buf);
 }
 
-static int battery_chemistry_show(
+static int show_battery_chemistry(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
 	return show_tpc_bat_str(6, 2, 5, attr, buf);
 }
 
-static int battery_voltage_show(
+static int show_battery_voltage(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
 	return show_tpc_bat_u16(1, 6, 1, attr, buf);  /* type: mV */
 }
 
-static int battery_design_voltage_show(
+static int show_battery_design_voltage(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
 	return show_tpc_bat_u16(3, 4, 1, attr, buf);  /* type: mV */
 }
 
-static int battery_current_now_show(
+static int show_battery_current_now(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
 	return show_tpc_bat_s16(1, 8, attr, buf);  /* type: mA */
 }
 
-static int battery_current_avg_show(
+static int show_battery_current_avg(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
 	return show_tpc_bat_s16(1, 10, attr, buf);  /* type: mA */
 }
 
-static int battery_power_now_show(
+static int show_battery_power_now(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
 	return show_tpc_bat_power(1, 6, 8, attr, buf); /* type: mW */
 }
 
-static int battery_power_avg_show(
+static int show_battery_power_avg(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
 	return show_tpc_bat_power(1, 6, 10, attr, buf);  /* type: mW */
 }
 
-static int battery_remaining_capacity_show(
+static int show_battery_remaining_capacity(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
 	return show_tpc_bat_u16(1, 14, 10, attr, buf); /* type: mWh */
 }
 
-static int battery_last_full_capacity_show(
+static int show_battery_last_full_capacity(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
 	return show_tpc_bat_u16(2, 2, 10, attr, buf); /* type: mWh */
 }
 
-static int battery_design_capacity_show(
+static int show_battery_design_capacity(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
 	return show_tpc_bat_u16(3, 2, 10, attr, buf); /* type: mWh */
 }
 
-static int battery_cycle_count_show(
+static int show_battery_cycle_count(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
 	return show_tpc_bat_u16(2, 12, 1, attr, buf); /* type: ordinal */
 }
 
-static int battery_serial_show(
+static int show_battery_serial(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
 	return show_tpc_bat_u16(3, 10, 1, attr, buf); /* type: ordinal */
 }
 
-static int battery_manufacture_date_show(
+static int show_battery_manufacture_date(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
 	return show_tpc_bat_date(3, 8, attr, buf); /* type: YYYY-MM-DD */
 }
 
-static int battery_first_use_date_show(
+static int show_battery_first_use_date(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
 	return show_tpc_bat_date(8, 2, attr, buf); /* type: YYYY-MM-DD */
 }
 
-static int battery_dump_show(
+static int show_battery_dump(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
 	int i;
@@ -1053,7 +1053,7 @@ static int battery_dump_show(
  * sysfs attribute I/O, other than batteries
  */
 
-static int ac_connected_show(
+static int show_ac_connected(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
 	int ret = is_battery_installed(0xFF);
@@ -1062,7 +1062,7 @@ static int ac_connected_show(
 	return sprintf(buf, "%d\n", ret);  /* type: boolean */
 }
 
-static int enable_pci_power_saving_on_boot_show(
+static int show_enable_pci_power_saving_on_boot(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
 	int on;
@@ -1072,7 +1072,7 @@ static int enable_pci_power_saving_on_boot_show(
 	return sprintf(buf, "%d\n", on);  /* type: boolean */
 }
 
-static int enable_pci_power_saving_on_boot_store(struct device *dev,
+static int store_enable_pci_power_saving_on_boot(struct device *dev,
 	struct device_attribute *attr, const char *buf, size_t count)
 {
 	int ret;
@@ -1098,7 +1098,7 @@ static int enable_pci_power_saving_on_boot_store(struct device *dev,
 #define MAX_SMAPI_ANSWER_STR 128
 static char smapi_attr_answer[MAX_SMAPI_ANSWER_STR] = "";
 
-static int smapi_request_show(struct device *dev, 
+static int show_smapi_request(struct device *dev, 
                               struct device_attribute *attr, char *buf)
 {
 	int ret = snprintf(buf, PAGE_SIZE, "%s", smapi_attr_answer);
@@ -1106,7 +1106,7 @@ static int smapi_request_show(struct device *dev,
 	return ret;
 }
 
-static int smapi_request_store(struct device *dev, 
+static int store_smapi_request(struct device *dev, 
                                struct device_attribute *attr,
                                const char *buf, size_t count)
 {
@@ -1138,7 +1138,7 @@ static int smapi_request_store(struct device *dev,
  * driver instead, and may get in the ATAPI driver's way.
  */
 
-static int cd_speed_show(struct device *dev, 
+static int show_cd_speed(struct device *dev, 
                          struct device_attribute *attr, char *buf)
 {
 	int speed;
@@ -1148,7 +1148,7 @@ static int cd_speed_show(struct device *dev,
 	return sprintf(buf, "%d\n", speed);
 }
 
-static int cd_speed_store(struct device *dev, 
+static int store_cd_speed(struct device *dev, 
                           struct device_attribute *attr,
                           const char *buf, size_t count)
 {
@@ -1226,14 +1226,14 @@ static struct platform_driver tp_driver = {
 
 /* Attributes in /sys/devices/platform/smapi/ */
 
-static DEVICE_ATTR(ac_connected, 0444, ac_connected_show, NULL);
+static DEVICE_ATTR(ac_connected, 0444, show_ac_connected, NULL);
 static DEVICE_ATTR(enable_pci_power_saving_on_boot, 0644,
-                   enable_pci_power_saving_on_boot_show,
-                   enable_pci_power_saving_on_boot_store);
-static DEVICE_ATTR(smapi_request, 0600, smapi_request_show,
-                                        smapi_request_store);
+                   show_enable_pci_power_saving_on_boot,
+                   store_enable_pci_power_saving_on_boot);
+static DEVICE_ATTR(smapi_request, 0600, show_smapi_request,
+                                        store_smapi_request);
 #ifdef PROVIDE_CD_SPEED
-static DEVICE_ATTR(cd_speed, 0644, cd_speed_show, cd_speed_store);
+static DEVICE_ATTR(cd_speed, 0644, show_cd_speed, store_cd_speed);
 #endif
 
 static struct attribute *tp_root_attributes[] = {
@@ -1288,14 +1288,14 @@ static struct attribute_group tp_root_attribute_group = {
 
 #define DEFINE_BAT_ATTR_RW(_BAT,_NAME) \
 	static struct bat_device_attribute dev_attr_##_NAME##_##_BAT = {  \
-		.dev_attr = __ATTR(_NAME, 0644, battery_##_NAME##_show,   \
-		                                battery_##_NAME##_store), \
+		.dev_attr = __ATTR(_NAME, 0644, show_battery_##_NAME,   \
+		                                store_battery_##_NAME), \
 		.bat = _BAT \
 	};
 
 #define DEFINE_BAT_ATTR_R(_BAT,_NAME) \
 	static struct bat_device_attribute dev_attr_##_NAME##_##_BAT = {    \
-		.dev_attr = __ATTR(_NAME, 0644, battery_##_NAME##_show, 0), \
+		.dev_attr = __ATTR(_NAME, 0644, show_battery_##_NAME, 0), \
 		.bat = _BAT \
 	};
 

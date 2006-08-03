@@ -36,7 +36,7 @@
 #include <linux/jiffies.h>
 #include <asm/io.h>
 
-#define TP_VERSION "0.25"
+#define TP_VERSION "0.26"
 
 MODULE_AUTHOR("Shem Multinymous");
 MODULE_DESCRIPTION("ThinkPad embedded controller hardware access");

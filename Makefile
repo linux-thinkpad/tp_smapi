@@ -40,21 +40,16 @@ clean:
 	rm -f tp_base.mod.* tp_base.o tp_base.ko .tp_base.*.cmd
 	rm -f hdaps.mod.* hdaps.o hdaps.ko .hdaps.*.cmd
 	rm -f *~ diff/*~ *.orig diff/*.orig *.rej diff/*.rej
-	rm -f tp_smapi-*-for-*.patch 
+	rm -f tp_smapi-*-for-*.patch
 	rm -fr .tmp_versions Modules.symvers diff/hdaps.diff.tmp
 	rm -f dmi_ec_oem_string.h
-	@if [ -f hdaps.c -a hdaps.c.flag -ot hdaps.c ]; then \
-		echo 'WARNING: hdaps.c has changed since autogeneration, will not delete.'; \
-	else \
-		rm -f hdaps.c hdaps.c.flag; \
-	fi
 
 load: check_hdaps unload modules
 	@( [ `id -u` == 0 ] || { echo "Must be root to load modules"; exit 1; } )
 	{ insmod ./tp_base.ko debug=$(DEBUG) &&\
 	  insmod ./tp_smapi.ko debug=$(DEBUG) &&\
 	  $(LOAD_HDAPS); }; :
-	@echo -e '\nRecent dmesg output:' ; dmesg | tail -9
+	@echo -e '\nRecent dmesg output:' ; dmesg | tail -10
 
 unload:
 	@( [ `id -u` == 0 ] || { echo "Must be root to unload modules"; exit 1; } )
@@ -79,16 +74,6 @@ endif
 	$(MAKE) -C $(KSRC) M=$(PWD) modules_install
 	depmod -a
 
-# Match hdaps.c from kernel tree into local copy.
-# (First do a small change in our own patch if kernel != 2.6.17.x)
-hdaps.c: $(KSRC)/drivers/hwmon/hdaps.c diff/hdaps.diff
-	cat $(PWD)/diff/hdaps.diff \
-	| if ! grep -q 'ret = -ENODEV' $(KSRC)/drivers/hwmon/hdaps.c; then \
-	  perl -0777 -pe 's/(laptop not found.*\n.*)ENODEV/$$1ENXIO/'; else cat; fi \
-	| if grep -q 'Celsius' $(KSRC)/drivers/hwmon/hdaps.c; then \
-	  perl -0777 -pe 's/ celcius / Celsius /'; else cat; fi \
-	| patch -d $(KSRC) -p1 -o $(PWD)/hdaps.c  ||  { rm -v hdaps.c; exit 1; }
-	@touch -r hdaps.c hdaps.c.flag
 
 # Ugly kludge for kernels that can't report OEM Strings DMI information:
 ifeq ($(shell grep -q DMI_DEV_TYPE_OEM_STRING $(KSRC)/include/linux/dmi.h || echo 1),1)
@@ -97,13 +82,13 @@ $(error Could not run /usr/sbin/dmidecode. Must be root or get sudo password to 
 endif
 GEN_DMI_DECODE_PATCH= \
   cat $(PWD)/diff/dmi-decode-and-save-oem-string-information.patch | \
-  { [ -f $(KSRC)/drivers/firmware/dmi_scan.c ] || \
+  { [ -f $(KSRC)/drivers/firmware/dmi_scan.c ] && cat || \
     perl -pe 's@drivers/firmware/dmi_scan.c@arch/i386/kernel/dmi_scan.c@g'; }
 DMI_EC_OEM_STRING:=$(shell sudo /usr/sbin/dmidecode | grep 'IBM ThinkPad Embedded Controller')
 dmi_ec_oem_string.h: $(KSRC)/include/linux/dmi.h
 	@echo 'WARNING: Your kernel does not have this patch applied:' >&2
-	@echo 'dmi-decode-and-save-oem-string-information.patch' >&2
-	@echo 'So I am hard-coding machine-specific DMI information into your driver.' >&2
+	@echo '  dmi-decode-and-save-oem-string-information.patch' >&2
+	@echo '  So I am hard-coding machine-specific DMI information into your driver.' >&2
 	echo '/* This is machine-specific DMI information. */' > $@
 	echo '#define DMI_EC_OEM_STRING_KLUDGE "$(DMI_EC_OEM_STRING)"' >> $@
 else
@@ -124,7 +109,7 @@ PATCH  := tp_smapi-$(TP_VER)-for-$(KVER).patch
 BASE_IN_PATCH  := 1
 SMAPI_IN_PATCH := 1
 
-patch: hdaps.c
+patch:
 	TMPDIR=`mktemp -d /tmp/tp_smapi-patch.XXXXXX` &&\
 	echo "Work directory: $$TMPDIR" &&\
 	cd $$TMPDIR &&\
@@ -164,10 +149,6 @@ patch: hdaps.c
 
 #####################################################################
 # Tools for preparing a release. Ignore these.
-
-mk-hdaps.diff: diff/hdaps.diff $(KSRC)/drivers/hwmon/hdaps.c
-	{ head -2 diff/hdaps.diff; diff -up -U3 $(KSRC)/drivers/hwmon/hdaps.c hdaps.c | tail -n +3; } > diff/hdaps.diff.tmp || :
-	mv diff/hdaps.diff.tmp diff/hdaps.diff
 
 set-version:
 	perl -i -pe 's/^(tp_smapi version ).*/$${1}$(VER)/' README
