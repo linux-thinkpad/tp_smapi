@@ -1,5 +1,22 @@
 Change history for tp_smapi:
 
+0.27 2006-08-05
+---------------------
+Visible changes:
+- Renamed tp_base.* to thinkpad_ec.*.
+  NOTE: If you have manual modprobe commands or configuration mentioning 
+  tp_base, you'll need to change them.
+- hdaps: All HDAPS-equippedThinkPads should be now be automatically
+  recognized. Whitelisting is needed only for changing the axis
+  configuration.
+- hdaps: Removed 'force' module parameter, it's no longer needed.
+
+Internal changes:
+- Renamed all tp_controller_* functions to thinkpad_ec_*.
+- Small change to invalidation in hdaps_device_init().
+- Separate Kconfig changes into separate patches.
+- Clean up generated patch format a bit.
+
 0.26 2006-08-04
 ---------------------
 - The modified hdaps.c is now included as a full file (based on linux git)

@@ -1,0 +1,1 @@
+../../thinkpad_ec.h

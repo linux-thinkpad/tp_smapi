@@ -1,0 +1,10 @@
+--- a/drivers/firmware/Kconfig
++++ b/drivers/firmware/Kconfig
+@@ -85,4 +85,7 @@
+ 	  Say Y or M here to enable the driver for use by Dell systems
+ 	  management software such as Dell OpenManage.
+ 
++config THINKPAD_EC
++	tristate
++
+ endmenu

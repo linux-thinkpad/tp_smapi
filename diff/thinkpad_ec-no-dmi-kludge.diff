@@ -1,5 +1,5 @@
---- orig/tp_base.c	2006-08-02 00:00:00.000000000 +0000
-+++ no-dmi-kludge/tp_base.c	2006-08-02 00:00:00.000000000 +0000
+--- orig/thinkpad_ec.c	2006-08-02 00:00:00.000000000 +0000
++++ no-dmi-kludge/thinkpad_ec.c	2006-08-02 00:00:00.000000000 +0000
 @@ -402,9 +402,4 @@ static int __init check_for_embedded_con
  	};
 -#include "dmi_ec_oem_string.h"

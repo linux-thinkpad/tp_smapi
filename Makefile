@@ -7,7 +7,7 @@ MOD_DIR     := /lib/modules/$(KVER)/kernel
 PWD         := $(shell pwd)
 IDIR        := include/linux
 TP_DIR      := drivers/firmware
-TP_MODULES  := tp_base.o tp_smapi.o
+TP_MODULES  := thinkpad_ec.o tp_smapi.o
 SHELL       := /bin/bash
 
 ifeq ($(HDAPS),1)
@@ -31,13 +31,13 @@ export TP_MODULES
 
 default: modules
 
-# Build the modules tp_base.ko, tp_smapi.ko and (if HDAPS=1) hdaps.ko
+# Build the modules thinkpad_ec.ko, tp_smapi.ko and (if HDAPS=1) hdaps.ko
 modules: $(KSRC) dmi_ec_oem_string.h $(patsubst %.o,%.c,$(TP_MODULES))
 	$(MAKE) -C $(KSRC) M=$(PWD) modules
 
 clean:
 	rm -f tp_smapi.mod.* tp_smapi.o tp_smapi.ko .tp_smapi.*.cmd
-	rm -f tp_base.mod.* tp_base.o tp_base.ko .tp_base.*.cmd
+	rm -f thinkpad_ec.mod.* thinkpad_ec.o thinkpad_ec.ko .thinkpad_ec.*.cmd
 	rm -f hdaps.mod.* hdaps.o hdaps.ko .hdaps.*.cmd
 	rm -f *~ diff/*~ *.orig diff/*.orig *.rej diff/*.rej
 	rm -f tp_smapi-*-for-*.patch
@@ -46,7 +46,7 @@ clean:
 
 load: check_hdaps unload modules
 	@( [ `id -u` == 0 ] || { echo "Must be root to load modules"; exit 1; } )
-	{ insmod ./tp_base.ko debug=$(DEBUG) &&\
+	{ insmod ./thinkpad_ec.ko debug=$(DEBUG) &&\
 	  insmod ./tp_smapi.ko debug=$(DEBUG) &&\
 	  $(LOAD_HDAPS); }; :
 	@echo -e '\nRecent dmesg output:' ; dmesg | tail -10
@@ -55,7 +55,8 @@ unload:
 	@( [ `id -u` == 0 ] || { echo "Must be root to unload modules"; exit 1; } )
 	if lsmod | grep -q '^hdaps '; then rmmod hdaps; fi
 	if lsmod | grep -q '^tp_smapi '; then rmmod tp_smapi; fi
-	if lsmod | grep -q '^tp_base '; then rmmod tp_base; fi
+	if lsmod | grep -q '^thinkpad_ec '; then rmmod thinkpad_ec; fi
+	if lsmod | grep -q '^tp_base '; then rmmod tp_base; fi  # old thinkpad_ec
 
 check_hdaps:
 ifneq ($(HDAPS),1)
@@ -67,9 +68,11 @@ endif
 
 install: modules
 	@( [ `id -u` == 0 ] || { echo "Must be root to install modules"; exit 1; } )
-	rm -f $(MOD_DIR)/$(TP_DIR)/{tp_base,tp_smapi}.ko
+	rm -f $(MOD_DIR)/$(TP_DIR)/{thinkpad_ec,tp_smapi,tp_base}.ko
+	rm -f $(MOD_DIR)/extra/{thinkpad_ec,tp_smapi,tp_base}.ko
 ifeq ($(HDAPS),1)
 	rm -f $(MOD_DIR)/drivers/hwmon/hdaps.ko
+	rm -f $(MOD_DIR)/extra/hdaps.ko
 endif
 	$(MAKE) -C $(KSRC) M=$(PWD) modules_install
 	depmod -a
@@ -92,7 +95,7 @@ dmi_ec_oem_string.h: $(KSRC)/include/linux/dmi.h
 	echo '/* This is machine-specific DMI information. */' > $@
 	echo '#define DMI_EC_OEM_STRING_KLUDGE "$(DMI_EC_OEM_STRING)"' >> $@
 else
-NO_DMI_KLUDGE_DIFF=$(PWD)/diff/tp_base-no-dmi-kludge.diff
+NO_DMI_KLUDGE_DIFF=$(PWD)/diff/thinkpad_ec-no-dmi-kludge.diff
 GEN_DMI_DECODE_PATCH=cat /dev/null
 dmi_ec_oem_string.h: $(KSRC)/include/linux/dmi.h
 	echo '/* Intentionally empty. You have proper DMI OEM Strings. */' > $@
@@ -102,12 +105,13 @@ endif
 # Generate a stand-alone kernel patch
 
 TP_VER := ${shell sed -ne 's/^\#define TP_VERSION \"\(.*\)\"/\1/gp' tp_smapi.c}
-ORG    := linux-$(KVER)-orig
-NEW    := linux-$(KVER)-patched
+ORG    := a
+NEW    := b
 PATCH  := tp_smapi-$(TP_VER)-for-$(KVER).patch
 
 BASE_IN_PATCH  := 1
 SMAPI_IN_PATCH := 1
+HDAPS_IN_PATCH := 1
 
 patch:
 	TMPDIR=`mktemp -d /tmp/tp_smapi-patch.XXXXXX` &&\
@@ -121,18 +125,22 @@ patch:
 	cp -r $(ORG) $(NEW) &&\
 	\
 	if [ "$(BASE_IN_PATCH)" == 1 ]; then \
-	patch --no-backup-if-mismatch -s -d $(NEW) -i $(PWD)/diff/Kconfig-tp_base.diff -p1 &&\
-	cp $(PWD)/tp_base.c $(NEW)/$(TP_DIR)/tp_base.c &&\
-	cp $(PWD)/tp_base.h $(NEW)/$(IDIR)/tp_base.h &&\
+	patch --no-backup-if-mismatch -s -d $(NEW) -i $(PWD)/diff/Kconfig-thinkpad_ec.diff -p1 &&\
+	cp $(PWD)/thinkpad_ec.c $(NEW)/$(TP_DIR)/thinkpad_ec.c &&\
+	cp $(PWD)/thinkpad_ec.h $(NEW)/$(IDIR)/thinkpad_ec.h &&\
+	patch --no-backup-if-mismatch -s -d $(NEW)/$(TP_DIR) -i $(PWD)/diff/thinkpad_ec-no-dmi-kludge.diff -p1 &&\
+	sed -i -e '$$aobj-$$(CONFIG_THINKPAD_EC)       += thinkpad_ec.o' $(NEW)/$(TP_DIR)/Makefile \
+	; fi &&\
+	\
+	if [ "$(HDAPS_IN_PATCH)" == 1 ]; then \
 	cp $(PWD)/hdaps.c $(NEW)/drivers/hwmon/ &&\
-	sed -i -e '$$aobj-$$(CONFIG_TP_BASE)           += tp_base.o' $(NEW)/$(TP_DIR)/Makefile \
+	patch --no-backup-if-mismatch -s -d $(NEW) -i $(PWD)/diff/Kconfig-hdaps-select-thinkpad_ec -p1 \
 	; fi &&\
 	\
 	if [ "$(SMAPI_IN_PATCH)" == 1 ]; then \
 	sed -i -e '$$aobj-$$(CONFIG_TP_SMAPI)          += tp_smapi.o' $(NEW)/$(TP_DIR)/Makefile &&\
 	cp $(PWD)/tp_smapi.c $(NEW)/$(TP_DIR)/tp_smapi.c &&\
 	patch --no-backup-if-mismatch -s -d $(NEW)/$(TP_DIR) -i $(PWD)/diff/tp_smapi-no_cd.diff -p1 &&\
-	patch --no-backup-if-mismatch -s -d $(NEW)/$(TP_DIR) -i $(PWD)/diff/tp_base-no-dmi-kludge.diff -p1 &&\
 	patch --no-backup-if-mismatch -s -d $(NEW) -i $(PWD)/diff/Kconfig-tp_smapi.diff -p1 &&\
 	mkdir -p $(NEW)/Documentation &&\
 	perl -0777 -pe 's/\n(Installation\n---+|Conflict with HDAPS\n---+|Files in this package\n---+|Setting and getting CD-ROM speed:\n).*?\n(?=[^\n]*\n-----)/\n/gs' $(PWD)/README > $(NEW)/Documentation/tp_smapi.txt \
@@ -141,7 +149,7 @@ patch:
 	{ diff -dNurp $(ORG) $(NEW) > patch \
 	  || [ $$? -lt 2 ]; } &&\
 	$(GEN_DMI_DECODE_PATCH) >> patch &&\
-	{ diffstat patch; echo; echo; cat patch; } \
+	{ echo "Generated for $(KVER) in $(KSRC)"; echo; diffstat patch; echo; echo; cat patch; } \
 	  > $(PWD)/${PATCH} &&\
 	rm -r $$TMPDIR
 	@echo -e "\nPatch file created:\n  ${PATCH}"
@@ -152,7 +160,7 @@ patch:
 
 set-version:
 	perl -i -pe 's/^(tp_smapi version ).*/$${1}$(VER)/' README
-	perl -i -pe 's/^(#define TP_VERSION ").*/$${1}$(VER)"/' tp_base.c tp_smapi.c
+	perl -i -pe 's/^(#define TP_VERSION ").*/$${1}$(VER)"/' thinkpad_ec.c tp_smapi.c
 
 else
 #####################################################################

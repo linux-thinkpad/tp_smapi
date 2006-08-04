@@ -1,5 +1,5 @@
 /*
- *  tp_base.h - interface to the ThinkPad embedded controller LPC3 functions
+ *  thinkpad_ec.h - interface to ThinkPad embedded controller LPC3 functions
  * 
  *  Copyright (C) 2005 Shem Multinymous <multinymous@gmail.com>
  *
@@ -18,29 +18,30 @@
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#ifndef _TP_BASE_H
-#define _TP_BASE_H
+#ifndef _THINKPAD_EC_H
+#define _THINKPAD_EC_H
 
 #ifdef __KERNEL__
 
 #define TP_CONTROLLER_ROW_LEN 16
 
-struct tp_controller_row {
+/* EC transactions input and output (possibly partial) vectors of 16 bytes. */
+struct thinkpad_ec_row {
 	u16 mask; /* bitmap of which entries of val[] are meaningful */
 	u8 val[TP_CONTROLLER_ROW_LEN];
 };
 
-extern int tp_controller_lock(void);
-extern int tp_controller_try_lock(void);
-extern void tp_controller_unlock(void);
+extern int thinkpad_ec_lock(void);
+extern int thinkpad_ec_try_lock(void);
+extern void thinkpad_ec_unlock(void);
 
-extern int tp_controller_read_row(const struct tp_controller_row *args,
-                                  struct tp_controller_row *data);
-extern int tp_controller_try_read_row(const struct tp_controller_row *args,
-                                      struct tp_controller_row *mask);
-extern int tp_controller_prefetch_row(const struct tp_controller_row *args);
-extern void tp_controller_invalidate(void);
+extern int thinkpad_ec_read_row(const struct thinkpad_ec_row *args,
+                                struct thinkpad_ec_row *data);
+extern int thinkpad_ec_try_read_row(const struct thinkpad_ec_row *args,
+                                    struct thinkpad_ec_row *mask);
+extern int thinkpad_ec_prefetch_row(const struct thinkpad_ec_row *args);
+extern void thinkpad_ec_invalidate(void);
 
 
 #endif /* __KERNEL */
-#endif /* _TP_BASE_H */
+#endif /* _THINKPAD_EC_H */

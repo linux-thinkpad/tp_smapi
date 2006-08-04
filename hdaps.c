@@ -33,11 +33,10 @@
 #include <linux/module.h>
 #include <linux/timer.h>
 #include <linux/dmi.h>
-#include <linux/tp_base.h>
-#include <linux/jiffies.h>
+#include <linux/thinkpad_ec.h>
 
 /* Embedded controller accelerometer read command and its result: */
-static const struct tp_controller_row ec_accel_args =
+static const struct thinkpad_ec_row ec_accel_args =
 	{ .mask=0x0001, .val={0x11} };
 #define EC_ACCEL_IDX_READOUTS	0x1	/* readouts included in this read */
 					/* First readout, if READOUTS>=1: */
@@ -60,14 +59,12 @@ static const struct tp_controller_row ec_accel_args =
 
 #define HDAPS_INPUT_FUZZ	4	/* input event threshold */
 #define HDAPS_INPUT_FLAT	4
-
 #define KMACT_REMEMBER_PERIOD   (HZ/10) /* keyboard/mouse persistance */
 
 static struct timer_list hdaps_timer;
 static struct platform_device *pdev;
 static struct input_dev *hdaps_idev;
 static unsigned int hdaps_invert;
-static unsigned int hdaps_force;
 static int needs_calibration = 0;
 
 /* Configuration: */
@@ -80,12 +77,12 @@ static int fake_data_mode = 0;       /* Enable EC fake data mode? */
 /* Latest state readout: */
 static int pos_x, pos_y;      /* position */
 static int temperature;       /* temperature */
-static int stale_readout = 1; /* last read failed */
+static int stale_readout = 1; /* last read invalid */
 static int rest_x, rest_y;    /* calibrated rest position */
 
 /* Last time we saw keyboard and mouse activity: */
-u64 last_keyboard_jiffies = INITIAL_JIFFIES;
-u64 last_mouse_jiffies = INITIAL_JIFFIES;
+static u64 last_keyboard_jiffies = INITIAL_JIFFIES;
+static u64 last_mouse_jiffies = INITIAL_JIFFIES;
 
 /* __hdaps_update - read current state and update global state variables.
  * Also prefetches the next read, to reduce udelay busy-waiting.
@@ -95,17 +92,17 @@ u64 last_mouse_jiffies = INITIAL_JIFFIES;
 static int __hdaps_update(int fast)
 {
 	/* Read data: */
-	struct tp_controller_row data;
+	struct thinkpad_ec_row data;
 	int ret;
 
 	data.mask = (1 << EC_ACCEL_IDX_READOUTS) | (1 << EC_ACCEL_IDX_KMACT) |
 	            (3 << EC_ACCEL_IDX_YPOS1)    | (3 << EC_ACCEL_IDX_XPOS1) |
 	            (1 << EC_ACCEL_IDX_TEMP1)    | (1 << EC_ACCEL_IDX_RETVAL);
 	if (fast)
-		ret = tp_controller_try_read_row(&ec_accel_args, &data);
+		ret = thinkpad_ec_try_read_row(&ec_accel_args, &data);
 	else
-		ret = tp_controller_read_row(&ec_accel_args, &data);
-	tp_controller_prefetch_row(&ec_accel_args); /* Prefetch even if error */
+		ret = thinkpad_ec_read_row(&ec_accel_args, &data);
+	thinkpad_ec_prefetch_row(&ec_accel_args); /* Prefetch even if error */
 	if (ret)
 		return ret;
 
@@ -144,11 +141,10 @@ static int __hdaps_update(int fast)
 	return 0;
 }
 
-/*
- * hdaps_read_pair - reads the values from a pair of ports, placing the values
- * in the given pointers.  Returns zero on success.  Can sleep.
+/* hdaps_update - read current state and update global state variables.
+ * Also prefetches the next read, to reduce udelay busy-waiting.
  * Retries until timeout if the accelerometer is not in ready status (common).
- * Does internal locking.
+ * Does its own locking.
  */
 static int hdaps_update(void)
 {
@@ -156,11 +152,11 @@ static int hdaps_update(void)
 	if (!stale_readout) /* already updated recently? */
 		return 0;
 	for (total=READ_TIMEOUT_MSECS; total>0; total-=RETRY_MSECS) {
-		ret = tp_controller_lock();
+		ret = thinkpad_ec_lock();
 		if (ret)
 			return ret;
 		ret = __hdaps_update(0);
-		tp_controller_unlock();
+		thinkpad_ec_unlock();
 
 		if (!ret)
 			return 0;
@@ -176,10 +172,10 @@ static int hdaps_update(void)
  * Returns zero on success and negative error code on failure.  Can sleep.
  */
 static int hdaps_set_power(int on) {
-	struct tp_controller_row args = 
+	struct thinkpad_ec_row args = 
 		{ .mask=0x0003, .val={0x14, on?0x01:0x00} };
-	struct tp_controller_row data = { .mask = 0x8000 };
-	int ret = tp_controller_read_row(&args, &data);
+	struct thinkpad_ec_row data = { .mask = 0x8000 };
+	int ret = thinkpad_ec_read_row(&args, &data);
 	if (ret)
 		return ret;
 	if (data.val[0xF]!=0x00)
@@ -193,10 +189,10 @@ static int hdaps_set_power(int on) {
  * Returns zero on success and negative error code on failure.  Can sleep.
  */
 static int hdaps_set_fake_data_mode(int on) {
-	struct tp_controller_row args = 
+	struct thinkpad_ec_row args = 
 		{ .mask=0x0007, .val={0x17, 0x83, on?0x01:0x00} };
-	struct tp_controller_row data = { .mask = 0x8000 };
-	int ret = tp_controller_read_row(&args, &data);
+	struct thinkpad_ec_row data = { .mask = 0x8000 };
+	int ret = thinkpad_ec_read_row(&args, &data);
 	if (ret)
 		return ret;
 	if (data.val[0xF]!=0x00) {
@@ -216,10 +212,10 @@ static int hdaps_set_fake_data_mode(int on) {
  * Returns zero on success and negative error code on failure.  Can sleep.
  */
 static int hdaps_set_ec_config(int ec_rate, int order) {
-	struct tp_controller_row args = { .mask=0x000F, 
+	struct thinkpad_ec_row args = { .mask=0x000F, 
 		.val={0x10, (u8)ec_rate, (u8)(ec_rate>>8), order} };
-	struct tp_controller_row data = { .mask = 0x8000 };
-	int ret = tp_controller_read_row(&args, &data);
+	struct thinkpad_ec_row data = { .mask = 0x8000 };
+	int ret = thinkpad_ec_read_row(&args, &data);
 	printk(KERN_DEBUG "hdaps: setting ec_rate=%d, filter_order=%d\n",
 	       ec_rate, order);
 	if (ret)
@@ -247,10 +243,10 @@ static int hdaps_set_ec_config(int ec_rate, int order) {
  * Returns zero on success and negative error code on failure.  Can sleep.
  */
 static int hdaps_get_ec_config(int *ec_rate, int *order) {
-	const struct tp_controller_row args = 
+	const struct thinkpad_ec_row args = 
 		{ .mask=0x0003, .val={0x17, 0x82} };
-	struct tp_controller_row data = { .mask = 0x801F };
-	int ret = tp_controller_read_row(&args, &data);
+	struct thinkpad_ec_row data = { .mask = 0x801F };
+	int ret = thinkpad_ec_read_row(&args, &data);
 	if (ret)
 		return ret;
 	if (data.val[0xF]!=0x00)
@@ -269,9 +265,9 @@ static int hdaps_get_ec_config(int *ec_rate, int *order) {
  * Returns zero on success and negative error code on failure.  Can sleep.
  */
 static int hdaps_get_ec_mode(u8 *mode) {
-	const struct tp_controller_row args = { .mask=0x0001, .val={0x13} };
-	struct tp_controller_row data = { .mask = 0x8002 };
-	int ret = tp_controller_read_row(&args, &data);
+	const struct thinkpad_ec_row args = { .mask=0x0001, .val={0x13} };
+	struct thinkpad_ec_row data = { .mask = 0x8002 };
+	int ret = thinkpad_ec_read_row(&args, &data);
 	if (ret)
 		return ret;
 	if (data.val[0xF]!=0x00) {
@@ -290,10 +286,10 @@ static int hdaps_get_ec_mode(u8 *mode) {
  * Returns zero on success and negative error code on failure.  Can sleep.
  */
 static int __init hdaps_check_ec(u8 *mode) {
-	const struct tp_controller_row args = 
+	const struct thinkpad_ec_row args = 
 		{ .mask=0x0003, .val={0x17, 0x81} };
-	struct tp_controller_row data = { .mask = 0x800E };
-	int ret = tp_controller_read_row(&args, &data);
+	struct thinkpad_ec_row data = { .mask = 0x800E };
+	int ret = thinkpad_ec_read_row(&args, &data);
 	if (ret)
 		return  ret;
 	if (data.val[0x1]!=0x00 || data.val[0x2]!=0x60 ||
@@ -312,7 +308,7 @@ static int hdaps_device_init(void)
 	int ret;
 	u8 mode;
 
-	ret = tp_controller_lock();
+	ret = thinkpad_ec_lock();
 	if (ret)
 		return ret;
 
@@ -335,19 +331,20 @@ static int hdaps_device_init(void)
 	if (hdaps_set_fake_data_mode(fake_data_mode))
 		ABORT_INIT("hdaps_set_fake_data_mode failed");
 
-	tp_controller_invalidate();
+	thinkpad_ec_invalidate();
 	udelay(200);
 
 	/* Just prefetch instead of reading, to avoid ~1sec delay on load */
-	ret = tp_controller_prefetch_row(&ec_accel_args);
+	ret = thinkpad_ec_prefetch_row(&ec_accel_args);
 	if (ret)
 		ABORT_INIT("initial prefetch failed");
 	goto good;
 bad:
+	thinkpad_ec_invalidate();
 	ret = -ENXIO;
 good:
-	tp_controller_invalidate();
-	tp_controller_unlock();
+	stale_readout = 1;
+	thinkpad_ec_unlock();
 	return ret;
 }
 
@@ -377,7 +374,7 @@ static int hdaps_probe(struct platform_device *dev)
 
 static int hdaps_suspend(struct platform_device *dev, pm_message_t state)
 {
-	/* Don't do mouse polls until resume re-initializes the sensor. */
+	/* Don't do hdaps polls until resume re-initializes the sensor. */
 	del_timer_sync(&hdaps_timer);
 	hdaps_device_shutdown();
 	return 0;
@@ -403,8 +400,7 @@ static struct platform_driver hdaps_driver = {
 };
 
 /*
- * hdaps_calibrate - Set our "resting" values.
- * Does its own locking.
+ * hdaps_calibrate - Set our "resting" values. Does its own locking.
  */
 static void hdaps_calibrate(void)
 {
@@ -423,11 +419,11 @@ static void hdaps_mousedev_poll(unsigned long unused)
 	stale_readout = 1;
 
 	/* Cannot sleep.  Try nonblockingly.  If we fail, try again later. */
-	if (tp_controller_try_lock())
+	if (thinkpad_ec_try_lock())
 		goto keep_active;
 
 	ret = __hdaps_update(1); /* fast update, we're in softirq context */
-	tp_controller_unlock();
+	thinkpad_ec_unlock();
 	/* Any of "successful", "not yet ready" and "not prefetched"? */
 	if (ret!=0 && ret!=-EBUSY && ret!=-ENODATA) {
 		printk(KERN_ERR 
@@ -455,7 +451,7 @@ static ssize_t hdaps_position_show(struct device *dev,
 	return sprintf(buf, "(%d,%d)\n", pos_x, pos_y);
 }
 
-static ssize_t hdaps_temperature_show(struct device *dev,
+static ssize_t hdaps_temp1_show(struct device *dev,
 				struct device_attribute *attr, char *buf)
 {
 	int ret = hdaps_update();
@@ -618,8 +614,8 @@ static ssize_t hdaps_fake_data_mode_show(
 }
 
 static DEVICE_ATTR(position, 0444, hdaps_position_show, NULL);
-static DEVICE_ATTR(temp1, 0444, hdaps_temperature_show, NULL); 
-  /* named temp1 instead of temperature for backward compatibility */
+static DEVICE_ATTR(temp1, 0444, hdaps_temp1_show, NULL);
+  /* "temp1" instead of "temperature" is hwmon convention */
 static DEVICE_ATTR(keyboard_activity, 0444, hdaps_keyboard_activity_show, NULL);
 static DEVICE_ATTR(mouse_activity, 0444, hdaps_mouse_activity_show, NULL);
 static DEVICE_ATTR(calibrate, 0644, hdaps_calibrate_show,hdaps_calibrate_store);
@@ -656,79 +652,41 @@ static struct attribute_group hdaps_attribute_group = {
 
 /* Module stuff */
 
-/* hdaps_dmi_match - found a match.  return one, short-circuiting the hunt. */
-static int hdaps_dmi_match(struct dmi_system_id *id)
-{
-	printk(KERN_INFO "hdaps: %s detected.\n", id->ident);
-	return 1;
-}
-
 /* hdaps_dmi_match_invert - found an inverted match. */
 static int hdaps_dmi_match_invert(struct dmi_system_id *id)
 {
 	hdaps_invert = 1;
-	printk(KERN_INFO "hdaps: inverting axis readings.\n");
-	return hdaps_dmi_match(id);
+	printk(KERN_INFO "hdaps: %s detected, inverting axes\n", 
+	       id->ident);
+	return 1;
 }
 
-#define HDAPS_DMI_MATCH_NORMAL(model)	{		\
-	.ident = "IBM " model,				\
-	.callback = hdaps_dmi_match,			\
-	.matches = {					\
-		DMI_MATCH(DMI_BOARD_VENDOR, "IBM"),	\
-		DMI_MATCH(DMI_PRODUCT_VERSION, model)	\
-	}						\
-}
-
-#define HDAPS_DMI_MATCH_INVERT(model)	{		\
-	.ident = "IBM " model,				\
+#define HDAPS_DMI_MATCH_INVERT(vendor,model)	{	\
+	.ident = vendor " " model,			\
 	.callback = hdaps_dmi_match_invert,		\
 	.matches = {					\
-		DMI_MATCH(DMI_BOARD_VENDOR, "IBM"),	\
+		DMI_MATCH(DMI_BOARD_VENDOR, vendor),	\
 		DMI_MATCH(DMI_PRODUCT_VERSION, model)	\
 	}						\
-}
-
-#define HDAPS_DMI_MATCH_LENOVO(model)   {               \
-        .ident = "Lenovo " model,                       \
-        .callback = hdaps_dmi_match_invert,             \
-        .matches = {                                    \
-                DMI_MATCH(DMI_BOARD_VENDOR, "LENOVO"),  \
-                DMI_MATCH(DMI_PRODUCT_VERSION, model)   \
-        }                                               \
 }
 
 static int __init hdaps_init(void)
 {
 	int ret;
 
-	/* Note that HDAPS_DMI_MATCH_NORMAL("ThinkPad T42") would match
+	/* List of models with abnormal axis configuration.
+	   Note that HDAPS_DMI_MATCH_NORMAL("ThinkPad T42") would match
 	  "ThinkPad T42p", so the order of the entries matters */
 	struct dmi_system_id hdaps_whitelist[] = {
-		HDAPS_DMI_MATCH_NORMAL("ThinkPad H"),
-		HDAPS_DMI_MATCH_INVERT("ThinkPad R50p"),
-		HDAPS_DMI_MATCH_NORMAL("ThinkPad R50"),
-		HDAPS_DMI_MATCH_NORMAL("ThinkPad R51"),
-		HDAPS_DMI_MATCH_NORMAL("ThinkPad R52"),
-		HDAPS_DMI_MATCH_NORMAL("ThinkPad H"),	 /* R52 (1846AQG) */
-		HDAPS_DMI_MATCH_INVERT("ThinkPad T41p"),
-		HDAPS_DMI_MATCH_NORMAL("ThinkPad T41"),
-		HDAPS_DMI_MATCH_INVERT("ThinkPad T42p"),
-		HDAPS_DMI_MATCH_NORMAL("ThinkPad T42"),
-		HDAPS_DMI_MATCH_NORMAL("ThinkPad T43"),
-		HDAPS_DMI_MATCH_LENOVO("ThinkPad T60p"),
-		HDAPS_DMI_MATCH_NORMAL("ThinkPad X40"),
-		HDAPS_DMI_MATCH_NORMAL("ThinkPad X41"),
-		HDAPS_DMI_MATCH_LENOVO("ThinkPad X60"),
-		HDAPS_DMI_MATCH_NORMAL("ThinkPad Z60m"),
+		HDAPS_DMI_MATCH_INVERT("IBM","ThinkPad R50p"),
+		HDAPS_DMI_MATCH_INVERT("IBM","ThinkPad T41p"),
+		HDAPS_DMI_MATCH_INVERT("IBM","ThinkPad T42p"),
+		HDAPS_DMI_MATCH_INVERT("LENOVO","ThinkPad T60p"),
+		HDAPS_DMI_MATCH_INVERT("LENOVO","ThinkPad X60"),
 		{ .ident = NULL }
 	};
 
-	if (!(dmi_check_system(hdaps_whitelist) || hdaps_force)) {
-		printk(KERN_WARNING "hdaps: supported laptop not found!\n");
-		ret = -ENODEV;
-		goto out;
-	}
+	dmi_check_system(hdaps_whitelist); /* default to normal axes */
 
 	/* Init timer before platform_driver_register, in case of suspend */
 	init_timer(&hdaps_timer);
@@ -800,9 +758,6 @@ module_exit(hdaps_exit);
 
 module_param_named(invert, hdaps_invert, bool, 0);
 MODULE_PARM_DESC(invert, "invert data along each axis");
-
-module_param_named(force, hdaps_force, bool, 0);
-MODULE_PARM_DESC(force, "force loading on non whitelisted laptops");
 
 MODULE_AUTHOR("Robert Love");
 MODULE_DESCRIPTION("IBM Hard Drive Active Protection System (HDAPS) driver");

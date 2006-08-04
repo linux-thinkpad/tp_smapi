@@ -7,7 +7,7 @@
  *  to the APM control port 0xB2. Older models use a different interface; 
  *  for those, try the "thinkpad" module.
  *  It also exposes battery status information, obtained from the ThinkPad
- *  embedded controller (via the tp_base module).
+ *  embedded controller (via the thinkpad_ec module).
  *
  *
  *  Copyright (C) 2006 Shem Multinymous <multinymous@gmail.com>.
@@ -36,12 +36,12 @@
 #include <linux/mc146818rtc.h>	/* CMOS defines */
 #include <linux/delay.h>
 #include <linux/version.h>
-#include <linux/tp_base.h>
+#include <linux/thinkpad_ec.h>
 #include <linux/platform_device.h>
 #include <asm/uaccess.h>
 #include <asm/io.h>
 
-#define TP_VERSION "0.26"
+#define TP_VERSION "0.27"
 #define TP_DESC "ThinkPad SMAPI Support"
 #define TP_DIR "smapi"
 
@@ -175,10 +175,9 @@ static int smapi_request(u32 inBX, u32 inCX,
 		DPRINTK("req_in: BX=%x CX=%x DI=%x SI=%x\n",
 			inBX, inCX, inDI, inSI);
 
-		/* SMAPI's SMBIOS call and tp_base end up using use different
-	 	* interfaces to the same chip, so play it safe (necessary?):
-		 */
-		ret = tp_controller_lock(); 
+		/* SMAPI's SMBIOS call and thinkpad_ec end up using use 
+	 	* different interfaces to the same chip, so play it safe. */
+		ret = thinkpad_ec_lock(); 
 		if (ret)
 			return ret;
 
@@ -209,8 +208,8 @@ static int smapi_request(u32 inBX, u32 inCX,
 			:"%eax", "%ebx", "%ecx", "%edx", "%edi",
 			 "%esi");
 
-		tp_controller_invalidate();
-		tp_controller_unlock();
+		thinkpad_ec_invalidate();
+		thinkpad_ec_unlock();
 
 		/* Don't let the next SMAPI access happen too quickly,
 		 * may case problems. (We're hold smapi_mutex).       */
@@ -261,15 +260,15 @@ static int smapi_write(u32 inBX, u32 inCX,
  */
 static int tpc_read_row(u8 arg0, int bat, u8 j, u8* dataval) {
 	int ret;
-	const struct tp_controller_row args = { .mask=0xFFFF,
+	const struct thinkpad_ec_row args = { .mask=0xFFFF,
 		.val={arg0, j,j,j,j,j,j,j,j,j,j,j,j,j,j, (u8)bat} };
-	struct tp_controller_row data = { .mask = 0xFFFF };
+	struct thinkpad_ec_row data = { .mask = 0xFFFF };
 
-	ret = tp_controller_lock();
+	ret = thinkpad_ec_lock();
 	if (ret)
 		return ret;
-	ret = tp_controller_read_row(&args, &data);
-	tp_controller_unlock();
+	ret = thinkpad_ec_read_row(&args, &data);
+	thinkpad_ec_unlock();
 	memcpy(dataval, &data.val, TP_CONTROLLER_ROW_LEN);
 	return ret;
 }
