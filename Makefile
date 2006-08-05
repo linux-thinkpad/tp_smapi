@@ -46,7 +46,7 @@ clean:
 
 load: check_hdaps unload modules
 	@( [ `id -u` == 0 ] || { echo "Must be root to load modules"; exit 1; } )
-	{ insmod ./thinkpad_ec.ko debug=$(DEBUG) &&\
+	{ insmod ./thinkpad_ec.ko &&\
 	  insmod ./tp_smapi.ko debug=$(DEBUG) &&\
 	  $(LOAD_HDAPS); }; :
 	@echo -e '\nRecent dmesg output:' ; dmesg | tail -10
@@ -140,7 +140,6 @@ patch:
 	if [ "$(SMAPI_IN_PATCH)" == 1 ]; then \
 	sed -i -e '$$aobj-$$(CONFIG_TP_SMAPI)          += tp_smapi.o' $(NEW)/$(TP_DIR)/Makefile &&\
 	cp $(PWD)/tp_smapi.c $(NEW)/$(TP_DIR)/tp_smapi.c &&\
-	patch --no-backup-if-mismatch -s -d $(NEW)/$(TP_DIR) -i $(PWD)/diff/tp_smapi-no_cd.diff -p1 &&\
 	patch --no-backup-if-mismatch -s -d $(NEW) -i $(PWD)/diff/Kconfig-tp_smapi.diff -p1 &&\
 	mkdir -p $(NEW)/Documentation &&\
 	perl -0777 -pe 's/\n(Installation\n---+|Conflict with HDAPS\n---+|Files in this package\n---+|Setting and getting CD-ROM speed:\n).*?\n(?=[^\n]*\n-----)/\n/gs' $(PWD)/README > $(NEW)/Documentation/tp_smapi.txt \

@@ -1,5 +1,20 @@
 Change history for tp_smapi:
 
+0.28  2006-08-16
+---------------------
+Visible changes:
+- thinkpad_ec: Removed 'debug' module parameter, it no longer affected much.
+- tp_smapi: Remove optical drive speed control (formerly #ifdefed out).
+
+Internal changes:
+- hdaps: Removed __init from hdaps_check_ec(). This fixes crashes on resume
+  (Thanks, Igor!).
+- hdaps: Moved axis transformation to dedicated function transform_axes().
+- tp_smapi: Cleaned up printk() output, changed macros.
+- tp_smapi: Added "E" to SMAPI parameter names (BX->EBX) - they're 32-bit.
+- tp_Smapi: Removed verbose printks()s on bad sysfs args.
+- A lot of small cleanups.
+
 0.27 2006-08-05
 ---------------------
 Visible changes:
