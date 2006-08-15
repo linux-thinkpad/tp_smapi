@@ -4,8 +4,8 @@
  *  This driver exposes some features of the System Management Application 
  *  Program Interface (SMAPI) BIOS found on ThinkPad laptops. It works on
  *  models in which the SMAPI BIOS runs in SMM and is invoked by writing
- *  to the APM control port 0xB2. Older models use a different interface; 
- *  for those, try the "thinkpad" module.
+ *  to the APM control port 0xB2. Older models use a different interface;
+ *  for those, try the out-of-tree "thinkpad" module from "tpctl".
  *  It also exposes battery status information, obtained from the ThinkPad
  *  embedded controller (via the thinkpad_ec module).
  *
@@ -41,7 +41,7 @@
 #include <asm/uaccess.h>
 #include <asm/io.h>
 
-#define TP_VERSION "0.28"
+#define TP_VERSION "0.29"
 #define TP_DESC "ThinkPad SMAPI Support"
 #define TP_DIR "smapi"
 
@@ -633,30 +633,61 @@ static int attr_get_bat(struct device_attribute *attr) {
 	return container_of(attr, struct bat_device_attribute, dev_attr)->bat;
 }
 
-/* Show an unsigned 16-bit value from EC battery status data,
- * after multiplying it by the given factor.                   */
-static int show_tp_ec_bat_u16(u8 arg0, int offset, int factor,
-                            struct device_attribute *attr, char *buf)
-{
-	u16 val;
-	int ret = get_tp_ec_bat_16(arg0, offset, attr_get_bat(attr), &val);
-	if (ret)
-		return ret;
-	return sprintf(buf, "%u\n", factor*(unsigned int)val);
-}
-
-/* Show a signed 16-bit value from EC battery status data */
-static int show_tp_ec_bat_s16(u8 arg0, int offset,
+/**
+ * show_tp_ec_bat_u16 - show an unsigned 16-bit battery attribute
+ * @arg0: specified 1st argument of EC raw to read
+ * @offset: byte offset in EC raw data
+ * @mul: correction factor to multiply by
+ * @na_msg: string to output is value not available (0xFFFFFFFF)
+ * @attr: battery attribute
+ * @buf: output buffer
+ * The 16-bit value is read from the EC, treated as unsigned,
+ * transformed as x->mul*x, and printed to the buffer.
+ * If the value is 0xFFFFFFFF and na_msg!=%NULL, na_msg is printed instead.
+ */
+static int show_tp_ec_bat_u16(u8 arg0, int offset, int mul,
+                              const char* na_msg,
                               struct device_attribute *attr, char *buf)
 {
 	u16 val;
 	int ret = get_tp_ec_bat_16(arg0, offset, attr_get_bat(attr), &val);
 	if (ret)
 		return ret;
-	return sprintf(buf, "%d\n", (s16)val);
+	if (na_msg && val == 0xFFFF)
+		return sprintf(buf, "%s\n", na_msg);
+	else
+		return sprintf(buf, "%u\n", mul*(unsigned int)val);
 }
 
-/* Show a string from EC battery status data */
+/**
+ * show_tp_ec_bat_s16 - show an signed 16-bit battery attribute
+ * @arg0: specified 1st argument of EC raw to read
+ * @offset: byte offset in EC raw data
+ * @mul: correction factor to multiply by
+ * @add: correction term to add after multiplication
+ * @attr: battery attribute
+ * @buf: output buffer
+ * The 16-bit value is read from the EC, treated as signed,
+ * transformed as x->mul*x+add, and printed to the buffer.
+ */
+static int show_tp_ec_bat_s16(u8 arg0, int offset, int mul, int add,
+                              struct device_attribute *attr, char *buf)
+{
+	u16 val;
+	int ret = get_tp_ec_bat_16(arg0, offset, attr_get_bat(attr), &val);
+	if (ret)
+		return ret;
+	return sprintf(buf, "%d\n", mul*(s16)val+add);
+}
+
+/**
+ * show_tp_ec_bat_str - show a string from EC battery status data
+ * @arg0: specified 1st argument of EC raw to read
+ * @offset: byte offset in EC raw data
+ * @maxlen: maximum string length
+ * @attr: battery attribute
+ * @buf: output buffer
+ */
 static int show_tp_ec_bat_str(u8 arg0, int offset, int maxlen,
                               struct device_attribute *attr, char *buf)
 {
@@ -674,9 +705,16 @@ static int show_tp_ec_bat_str(u8 arg0, int offset, int maxlen,
 	return strlen(buf);
 }
 
-/* Show a power readout from EC battery status data, after
- * computing it as current*voltage.                        */
-static int show_tp_ec_bat_power(u8 arg0, int offV, int offA,
+/**
+ * show_tp_ec_bat_power - show a power readout from EC battery status data
+ * @arg0: specified 1st argument of EC raw to read
+ * @offV: byte offset of voltage in EC raw data
+ * @offI: byte offset of current in EC raw data
+ * @attr: battery attribute
+ * @buf: output buffer
+ * Computes the power as current*voltage from the two given readout offsets.
+ */
+static int show_tp_ec_bat_power(u8 arg0, int offV, int offI,
                                 struct device_attribute *attr, char *buf)
 {
 	u8 row[TP_CONTROLLER_ROW_LEN];
@@ -688,11 +726,17 @@ static int show_tp_ec_bat_power(u8 arg0, int offV, int offA,
 	if (ret)
 		return ret;
 	millivolt = *(u16*)(row+offV);
-	milliamp = *(s16*)(row+offA);
+	milliamp = *(s16*)(row+offI);
 	return sprintf(buf, "%d\n", milliamp*millivolt/1000); /* type: mW */
 }
 
-/* Decode and show a date from EC battery status data */
+/**
+ * show_tp_ec_bat_date - decode and show a date from EC battery status data
+ * @arg0: specified 1st argument of EC raw to read
+ * @offset: byte offset in EC raw data
+ * @attr: battery attribute
+ * @buf: output buffer
+ */
 static int show_tp_ec_bat_date(u8 arg0, int offset,
                                struct device_attribute *attr, char *buf)
 {
@@ -942,25 +986,25 @@ static int show_battery_chemistry(
 static int show_battery_voltage(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
-	return show_tp_ec_bat_u16(1, 6, 1, attr, buf);  /* type: mV */
+	return show_tp_ec_bat_u16(1, 6, 1, NULL, attr, buf);  /* type: mV */
 }
 
 static int show_battery_design_voltage(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
-	return show_tp_ec_bat_u16(3, 4, 1, attr, buf);  /* type: mV */
+	return show_tp_ec_bat_u16(3, 4, 1, NULL, attr, buf);  /* type: mV */
 }
 
 static int show_battery_current_now(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
-	return show_tp_ec_bat_s16(1, 8, attr, buf);  /* type: mA */
+	return show_tp_ec_bat_s16(1, 8, 1, 0, attr, buf);  /* type: mA */
 }
 
 static int show_battery_current_avg(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
-	return show_tp_ec_bat_s16(1, 10, attr, buf);  /* type: mA */
+	return show_tp_ec_bat_s16(1, 10, 1, 0, attr, buf);  /* type: mA */
 }
 
 static int show_battery_power_now(
@@ -975,34 +1019,60 @@ static int show_battery_power_avg(
 	return show_tp_ec_bat_power(1, 6, 10, attr, buf);  /* type: mW */
 }
 
+static int show_battery_remaining_percent(
+	struct device *dev, struct device_attribute *attr, char *buf)
+{
+	return show_tp_ec_bat_u16(1, 12, 1, NULL, attr, buf); /* type: % */
+}
+
+static int show_battery_remaining_charging_time(
+	struct device *dev, struct device_attribute *attr, char *buf)
+{
+	return show_tp_ec_bat_u16(2, 8, 1, "not_charging",
+	                          attr, buf); /* type: minutes */
+}
+
+static int show_battery_remaining_running_time(
+	struct device *dev, struct device_attribute *attr, char *buf)
+{
+	return show_tp_ec_bat_u16(2, 6, 1, "not_discharging",
+	                          attr, buf); /* type: minutes */
+}
+
 static int show_battery_remaining_capacity(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
-	return show_tp_ec_bat_u16(1, 14, 10, attr, buf); /* type: mWh */
+	return show_tp_ec_bat_u16(1, 14, 10, "", attr, buf); /* type: mWh */
 }
 
 static int show_battery_last_full_capacity(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
-	return show_tp_ec_bat_u16(2, 2, 10, attr, buf); /* type: mWh */
+	return show_tp_ec_bat_u16(2, 2, 10, "", attr, buf); /* type: mWh */
 }
 
 static int show_battery_design_capacity(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
-	return show_tp_ec_bat_u16(3, 2, 10, attr, buf); /* type: mWh */
+	return show_tp_ec_bat_u16(3, 2, 10, "", attr, buf); /* type: mWh */
 }
 
 static int show_battery_cycle_count(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
-	return show_tp_ec_bat_u16(2, 12, 1, attr, buf); /* type: ordinal */
+	return show_tp_ec_bat_u16(2, 12, 1, "", attr, buf); /* type: ordinal */
+}
+
+static int show_battery_temperature(
+	struct device *dev, struct device_attribute *attr, char *buf)
+{
+	return show_tp_ec_bat_s16(1, 4, 100, -273100, attr, buf);  /* type: millicelsius */
 }
 
 static int show_battery_serial(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
-	return show_tp_ec_bat_u16(3, 10, 1, attr, buf); /* type: ordinal */
+	return show_tp_ec_bat_u16(3, 10, 1, "", attr, buf); /* type: int */
 }
 
 static int show_battery_manufacture_date(
@@ -1201,17 +1271,11 @@ static DEVICE_ATTR(enable_pci_power_saving_on_boot, 0644,
                    store_enable_pci_power_saving_on_boot);
 static DEVICE_ATTR(smapi_request, 0600, show_smapi_request,
                                         store_smapi_request);
-#ifdef PROVIDE_CD_SPEED
-static DEVICE_ATTR(cd_speed, 0644, show_cd_speed, store_cd_speed);
-#endif
 
 static struct attribute *tp_root_attributes[] = {
 	&dev_attr_ac_connected.attr,
 	&dev_attr_enable_pci_power_saving_on_boot.attr,
 	&dev_attr_smapi_request.attr,
-#ifdef PROVIDE_CD_SPEED
-	&dev_attr_cd_speed.attr,
-#endif
 	NULL
 };
 static struct attribute_group tp_root_attribute_group = {
@@ -1221,8 +1285,8 @@ static struct attribute_group tp_root_attribute_group = {
 /* Attributes under /sys/devices/platform/smapi/BAT{0,1}/ :
  * Every attribute needs to be defined (i.e., statically allocated) for
  * each battery, and then referenced in the attribute list of each battery.
- * We use preprocessor voodoo to avoid duplicating the list of attributes 
- * 4 times. The preprocessor output is just normal sysfs attributes code.
+ * We use preprocessor voodoo to avoid duplicating the list of attributes 4
+ * times. The preprocessor output is just normal sysfs attributes code.
  */
 
 /**
@@ -1247,11 +1311,15 @@ static struct attribute_group tp_root_attribute_group = {
 	_ATTR_R (_BAT, current_avg) \
 	_ATTR_R (_BAT, power_now) \
 	_ATTR_R (_BAT, power_avg) \
+	_ATTR_R (_BAT, remaining_percent) \
+	_ATTR_R (_BAT, remaining_charging_time) \
+	_ATTR_R (_BAT, remaining_running_time) \
 	_ATTR_R (_BAT, remaining_capacity) \
 	_ATTR_R (_BAT, last_full_capacity) \
 	_ATTR_R (_BAT, design_voltage) \
 	_ATTR_R (_BAT, design_capacity) \
 	_ATTR_R (_BAT, cycle_count) \
+	_ATTR_R (_BAT, temperature) \
 	_ATTR_R (_BAT, serial) \
 	_ATTR_R (_BAT, manufacture_date) \
 	_ATTR_R (_BAT, first_use_date) \

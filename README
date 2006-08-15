@@ -1,4 +1,4 @@
-tp_smapi version 0.28
+tp_smapi version 0.29
 IBM ThinkPad hardware functions driver
 
 Author:  Shem Multinymous <multinymous@gmail.com>
@@ -112,6 +112,9 @@ Misc read-only battery status (see note about HDAPS below):
 # cat /sys/devices/platform/smapi/BAT0/power_now   # instantaneous power
 # cat /sys/devices/platform/smapi/BAT0/power_avg   # last minute average
 # cat /sys/devices/platform/smapi/BAT0/last_full_capacity
+# cat /sys/devices/platform/smapi/BAT0/remaining_percent
+# cat /sys/devices/platform/smapi/BAT0/remaining_running_time
+# cat /sys/devices/platform/smapi/BAT0/remaining_charging_time
 # cat /sys/devices/platform/smapi/BAT0/remaining_capacity
 # cat /sys/devices/platform/smapi/BAT0/design_capacity
 # cat /sys/devices/platform/smapi/BAT0/voltage
@@ -123,7 +126,9 @@ Misc read-only battery status (see note about HDAPS below):
 # cat /sys/devices/platform/smapi/BAT0/serial
 # cat /sys/devices/platform/smapi/BAT0/manufacture_date
 # cat /sys/devices/platform/smapi/BAT0/first_use_date
+# cat /sys/devices/platform/smapi/BAT0/temperature # in milli-Celsius
 # cat /sys/devices/platform/smapi/ac_connected
+
 
 You can also get a hex dump of the raw status data, which contains additional data
 now in the above (if you can figure it out). Some unused values are autodetected

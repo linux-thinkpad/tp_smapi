@@ -305,7 +305,7 @@ static int hdaps_get_ec_mode(u8 *mode)
  * Follows the clean-room spec for HDAPS; we don't know what it means.
  * Returns zero on success and negative error code on failure.  Can sleep.
  */
-static int hdaps_check_ec()
+static int hdaps_check_ec(void)
 {
 	const struct thinkpad_ec_row args =
 		{ .mask=0x0003, .val={0x17, 0x81} };

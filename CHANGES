@@ -1,5 +1,19 @@
 Change history for tp_smapi:
 
+0.29  2006-08-17
+---------------------
+Visible changes:
+- Added new sysfs attributes to tp_smapi:
+    /sys/devices/platform/smapi/BAT0/remaining_percent
+    /sys/devices/platform/smapi/BAT0/remaining_running_time
+    /sys/devices/platform/smapi/BAT0/remaining_charging_time
+    /sys/devices/platform/smapi/BAT0/temperature    # milli-Celsius
+  All of these are read directly from the embedded controller, so they are
+  more accurate than doing your own computation.
+
+Internal changes:
+- tp_smapi: Extended and commented battery attribute show functions.
+
 0.28  2006-08-16
 ---------------------
 Visible changes:
