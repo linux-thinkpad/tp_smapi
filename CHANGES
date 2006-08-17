@@ -1,5 +1,28 @@
 Change history for tp_smapi:
 
+0.30  2006-09-03
+---------------------
+Visible changes:
+- Makefile: now supports kernels built with separate source and build
+  directories (thanks to Lenz Grimmer).
+  To work against against some kernel installed under /lib/modules/
+  add an appropriate KVER= parameter:
+  # make patch KVER=2.6.16-rc2
+  If it's not installed you'll need to set KSRC and KBUILD too:
+  # make patch KVER=2.6.16-rc2 KSRC=$HOME/2.6.16-rc2 KBUILD=$HOME/2.6.16-rc2
+- Changed the format of /sys/devices/platform/smapi/smapi_request
+  (no more register names).
+
+Internal changes:
+- tp_smapi: the 'dump' sysfs attribute now outputs only rows 0x00 through 0x0a,
+  since 0x0b causes an EC hang on some firmware (e.g., all T42 and old T43).
+  Thanks to Henrique and Sukant for tracking this down!
+- thinkpad_ec: Log a warning if 0x161F returns 0x80.
+- thinkpad_ec: Increase TPC_REQUEST_RETRIES
+- thinkpad_ec: Report row args upon data read error.
+- hdaps: Apply hwmon-hdaps-handle-errors-from-input-register-device.patch
+  from -mm.
+
 0.29  2006-08-17
 ---------------------
 Visible changes:

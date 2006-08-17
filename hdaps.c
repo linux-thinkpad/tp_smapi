@@ -754,13 +754,17 @@ static int __init hdaps_init(void)
 	input_set_abs_params(hdaps_idev, ABS_Y,
 			-256, 256, HDAPS_INPUT_FUZZ, HDAPS_INPUT_FLAT);
 
-	input_register_device(hdaps_idev);
+	ret = input_register_device(hdaps_idev);
+	if (ret)
+		goto out_idev;
 
 	mod_timer(&hdaps_timer, jiffies + HZ/sampling_rate);
 
 	printk(KERN_INFO "hdaps: driver successfully loaded.\n");
 	return 0;
 
+out_idev:
+	input_free_device(hdaps_idev);
 out_group:
 	sysfs_remove_group(&pdev->dev.kobj, &hdaps_attribute_group);
 out_device:

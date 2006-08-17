@@ -36,7 +36,7 @@
 #include <linux/jiffies.h>
 #include <asm/io.h>
 
-#define TP_VERSION "0.29"
+#define TP_VERSION "0.30"
 
 MODULE_AUTHOR("Shem Multinymous");
 MODULE_DESCRIPTION("ThinkPad embedded controller hardware access");
@@ -61,7 +61,7 @@ MODULE_LICENSE("GPL");
 /* Timeouts and retries */
 #define TPC_READ_RETRIES    150
 #define TPC_READ_NDELAY     500
-#define TPC_REQUEST_RETRIES 100
+#define TPC_REQUEST_RETRIES 1000
 #define TPC_REQUEST_NDELAY   10
 #define TPC_PREFETCH_TIMEOUT   (HZ/10)  /* invalidate prefetch after 0.1sec */
 
@@ -194,7 +194,8 @@ static int thinkpad_ec_request_row(const struct thinkpad_ec_row *args)
 /* Read current row data from the controller, assuming it's already
  * requested.
  */
-static int thinkpad_ec_read_data(struct thinkpad_ec_row *data)
+static int thinkpad_ec_read_data(const struct thinkpad_ec_row *args,
+                                 struct thinkpad_ec_row *data)
 {
 	int i;
 	u8 str3 = inb(TPC_STR3_PORT) & H8S_STR3_MASK;
@@ -209,7 +210,7 @@ static int thinkpad_ec_read_data(struct thinkpad_ec_row *data)
 	/* Finally, the EC signals output buffer full: */
 	if (str3 != (H8S_STR3_OBF3B|H8S_STR3_SWMF)) {
 		printk(KERN_WARNING
-		       MSG_FMT("bad initial STR3 (0x%02x)", str3));
+		       REQ_FMT("bad initial STR3", str3));
 		return -EIO;
 	}
 
@@ -226,7 +227,11 @@ static int thinkpad_ec_read_data(struct thinkpad_ec_row *data)
 	str3 = inb(TPC_STR3_PORT) & H8S_STR3_MASK;
 	if (str3 & H8S_STR3_OBF3B)
 		printk(KERN_WARNING
-		       MSG_FMT("OBF3B=1 after read (0x%02x)", str3));
+		       REQ_FMT("OBF3B=1 after read", str3));
+	/* If port 0x161F returns 0x80 too often, the EC may lock up: */
+	if (data->val[0xF] == 0x80)
+		printk(KERN_WARNING
+		       REQ_FMT("0x161F reports error", data->val[0xF]));
 	return 0;
 }
 
@@ -282,7 +287,7 @@ int thinkpad_ec_read_row(const struct thinkpad_ec_row *args,
 read_row:
 	/* Read the row's data */
 	for (retries=0; retries<TPC_READ_RETRIES; ++retries) {
-		ret = thinkpad_ec_read_data(data);
+		ret = thinkpad_ec_read_data(args, data);
 		if (!ret)
 			goto out;
 		if (ret!=-EBUSY)
@@ -319,7 +324,7 @@ int thinkpad_ec_try_read_row(const struct thinkpad_ec_row *args,
 	if (!thinkpad_ec_is_row_fetched(args)) {
 		ret = -ENODATA;
 	} else {
-		ret = thinkpad_ec_read_data(data);
+		ret = thinkpad_ec_read_data(args, data);
 		if (!ret)
 			prefetch_jiffies = TPC_PREFETCH_NONE; /* eaten up */
 	}

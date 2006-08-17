@@ -41,7 +41,7 @@
 #include <asm/uaccess.h>
 #include <asm/io.h>
 
-#define TP_VERSION "0.29"
+#define TP_VERSION "0.30"
 #define TP_DESC "ThinkPad SMAPI Support"
 #define TP_DIR "smapi"
 
@@ -1093,6 +1093,8 @@ static int show_battery_first_use_date(
  * a battery. Some of the enumerated values don't exist (i.e., the EC function
  * does not touch a register); we use a kludge to detect and denote these.
  */
+#define MIN_DUMP_ARG0 0x00
+#define MAX_DUMP_ARG0 0x0a /* 0x0b is useful too but hangs old EC firmware */
 static int show_battery_dump(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
@@ -1104,7 +1106,7 @@ static int show_battery_dump(
 	const u8 junka=0xAA, junkb=0x55; /* junk values for testing changes */
 	int ret;
 
-	for (arg0=0x00; arg0<=0x0b; ++arg0) {
+	for (arg0=MIN_DUMP_ARG0; arg0<=MAX_DUMP_ARG0; ++arg0) {
 		if ( (p-buf) > PAGE_SIZE-TP_CONTROLLER_ROW_LEN*5 )
 			return -ENOMEM; /* don't overflow sysfs buf */
 		/* Read raw twice with different junk values,
@@ -1189,7 +1191,7 @@ static int store_smapi_request(struct device *dev,
 	u32 outEBX, outECX, outEDX, outEDI, outESI;
 	const char* msg;
 	int ret;
-	if (sscanf(buf, "BX=%x CX=%x DI=%x SI=%x", &inEBX, &inECX, &inEDI, &inESI) != 4) {
+	if (sscanf(buf, "%x %x %x %x", &inEBX, &inECX, &inEDI, &inESI) != 4) {
 		smapi_attr_answer[0] = '\0';
 		return -EINVAL;
 	}
@@ -1197,7 +1199,7 @@ static int store_smapi_request(struct device *dev,
 	           inEBX, inECX, inEDI, inESI,
 	           &outEBX, &outECX, &outEDX, &outEDI, &outESI, &msg);
 	snprintf(smapi_attr_answer, MAX_SMAPI_ATTR_ANSWER_LEN,
-	         "BX=%x CX=%x DX=%x DI=%x SI=%x ret=%d msg=%s\n",
+	         "%x %x %x %x %x %d '%s'\n",
 	         (unsigned int)outEBX, (unsigned int)outECX, (unsigned int)outEDX, 
 	         (unsigned int)outEDI, (unsigned int)outESI, ret, msg);
 	if (ret)

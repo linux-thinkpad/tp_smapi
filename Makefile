@@ -2,8 +2,10 @@ ifndef TP_MODULES
 # This part runs as a normal, top-level Makefile:
 X:=$(shell false)
 KVER        := $(shell uname -r)
-KSRC        := /lib/modules/$(KVER)/build
-MOD_DIR     := /lib/modules/$(KVER)/kernel
+KBASE       := /lib/modules/$(KVER)
+KSRC        := $(KBASE)/source
+KBUILD      := $(KBASE)/build
+MOD_DIR     := $(KBASE)/kernel
 PWD         := $(shell pwd)
 IDIR        := include/linux
 TP_DIR      := drivers/firmware
@@ -33,7 +35,7 @@ default: modules
 
 # Build the modules thinkpad_ec.ko, tp_smapi.ko and (if HDAPS=1) hdaps.ko
 modules: $(KSRC) dmi_ec_oem_string.h $(patsubst %.o,%.c,$(TP_MODULES))
-	$(MAKE) -C $(KSRC) M=$(PWD) modules
+	$(MAKE) -C $(KSRC) M=$(PWD) O=$(KBUILD) modules
 
 clean:
 	rm -f tp_smapi.mod.* tp_smapi.o tp_smapi.ko .tp_smapi.*.cmd
@@ -74,7 +76,7 @@ ifeq ($(HDAPS),1)
 	rm -f $(MOD_DIR)/drivers/hwmon/hdaps.ko
 	rm -f $(MOD_DIR)/extra/hdaps.ko
 endif
-	$(MAKE) -C $(KSRC) M=$(PWD) modules_install
+	$(MAKE) -C $(KSRC) M=$(PWD) O=$(KBUILD) modules_install
 	depmod -a
 
 
