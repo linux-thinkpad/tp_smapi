@@ -34,9 +34,10 @@
 #include <linux/delay.h>
 #include <linux/thinkpad_ec.h>
 #include <linux/jiffies.h>
+#include <asm/semaphore.h>
 #include <asm/io.h>
 
-#define TP_VERSION "0.30"
+#define TP_VERSION "0.31"
 
 MODULE_AUTHOR("Shem Multinymous");
 MODULE_DESCRIPTION("ThinkPad embedded controller hardware access");
@@ -59,10 +60,10 @@ MODULE_LICENSE("GPL");
 #define H8S_STR3_MASK  0xF0  /* All bits we care about in STR3 */
 
 /* Timeouts and retries */
-#define TPC_READ_RETRIES    150
-#define TPC_READ_NDELAY     500
+#define TPC_READ_RETRIES     150
+#define TPC_READ_NDELAY      500
 #define TPC_REQUEST_RETRIES 1000
-#define TPC_REQUEST_NDELAY   10
+#define TPC_REQUEST_NDELAY    10
 #define TPC_PREFETCH_TIMEOUT   (HZ/10)  /* invalidate prefetch after 0.1sec */
 
 /* A few macros for printk()ing: */
@@ -74,7 +75,7 @@ MODULE_LICENSE("GPL");
 
 /* State of request prefetching: */
 static u8 prefetch_arg0, prefetch_argF;           /* Args of last prefetch */
-static u64 prefetch_jiffies;                      /* time of prefetch, or: */
+static u64 prefetch_jiffies;                      /* time of prefetch, or one of: */
 #define TPC_PREFETCH_NONE   INITIAL_JIFFIES       /* - No prefetch */
 #define TPC_PREFETCH_JUNK   (INITIAL_JIFFIES+1)   /* - Ignore prefetch */
 
@@ -178,8 +179,9 @@ static int thinkpad_ec_request_row(const struct thinkpad_ec_row *args)
 		str3 = inb(TPC_STR3_PORT) & H8S_STR3_MASK;
 		if (str3 & H8S_STR3_SWMF) /* EC started replying */
 			return 0;
-		else if (str3==(H8S_STR3_IBF3B|H8S_STR3_MWMF) ||
-		         str3==0x00) /* normal progress, wait it out */
+		else if (!(str3 & ~(H8S_STR3_IBF3B|H8S_STR3_MWMF)))
+			/* Normal progress (the EC hasn't seen the request
+			 * yet, or is processing it). Wait it out. */
 			ndelay(TPC_REQUEST_NDELAY);
 		else { /* weird EC status */
 			printk(KERN_WARNING
@@ -386,7 +388,7 @@ EXPORT_SYMBOL_GPL(thinkpad_ec_invalidate);
  * an arbitrary harmless EC request and seeing if the EC follows protocol.
  * This test writes to IO ports, so execute only after checking DMI.
  */
-static int thinkpad_ec_test(void)
+static int __init thinkpad_ec_test(void)
 {
 	int ret;
 	const struct thinkpad_ec_row args = /* battery 0 basic status */

@@ -1,4 +1,4 @@
-tp_smapi version 0.30
+tp_smapi version 0.31
 IBM ThinkPad hardware functions driver
 
 Author:  Shem Multinymous <multinymous@gmail.com>
@@ -36,7 +36,7 @@ To compile and install into the kernel's module path:
 # make install
 
 If you use the HDAPS driver, use these instead to replace the hdaps module
-with one patched for compatibility with tp_smapi (kernel source tree needed):
+with one patched for compatibility with tp_smapi:
 # make load HDAPS=1
 or
 # make install HDAPS=1
@@ -163,7 +163,7 @@ If you did touch it, you would so something like
 # echo '211a 100 0 0' > /sys/devices/platform/smapi/smapi_request
 # cat /sys/devices/platform/smapi/smapi_request
 and notice that in the output "211a 34b b2 0 0 0 'OK'", the "4b" in the 2nd
-parameter, converted to decimal is 75: the current charge stop threshold.
+value, converted to decimal is 75: the current charge stop threshold.
 
 
 Model-specific status

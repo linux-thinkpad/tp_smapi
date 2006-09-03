@@ -1,5 +1,19 @@
 Change history for tp_smapi:
 
+0.31  2007-03-07
+---------------------
+Visible changes:
+- Fix #includes to allow compilation on 64-bit platforms
+  (patch by Emil Renner Berthing).
+- thinkpad_ec: Avoid spurious "bad end STR3: (...)->0x80" warnings
+  by relaxing status check (still OK according to H8 EC docs).
+- Invert axes on all T60, not just T60p.
+
+Internal changes:
+- Add __init to find_smapi_port() and thinkpad_ec_test()
+- tp_smapi.c: Fix "initialization from incompatible pointer type" warnings
+  on 64-bit platforms
+
 0.30  2006-09-03
 ---------------------
 Visible changes:

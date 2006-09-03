@@ -163,6 +163,12 @@ set-version:
 	perl -i -pe 's/^(tp_smapi version ).*/$${1}$(VER)/' README
 	perl -i -pe 's/^(#define TP_VERSION ").*/$${1}$(VER)"/' thinkpad_ec.c tp_smapi.c
 
+TGZ=../tp_smapi-$(VER).tgz
+create-tgz:
+	git-archive  --format=tar --prefix=tp_smapi-$(VER)/ HEAD | gzip -c > $(TGZ)
+	tar tzvf $(TGZ)
+	echo "Ready: $(TGZ)"
+
 else
 #####################################################################
 # This part runs as a submake in kernel Makefile context:

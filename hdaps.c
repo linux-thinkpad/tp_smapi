@@ -32,6 +32,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/timer.h>
+#include <linux/jiffies.h>
 #include <linux/dmi.h>
 #include <linux/thinkpad_ec.h>
 
@@ -712,7 +713,7 @@ static int __init hdaps_init(void)
 		HDAPS_DMI_MATCH_INVERT("IBM","ThinkPad R50p"),
 		HDAPS_DMI_MATCH_INVERT("IBM","ThinkPad T41p"),
 		HDAPS_DMI_MATCH_INVERT("IBM","ThinkPad T42p"),
-		HDAPS_DMI_MATCH_INVERT("LENOVO","ThinkPad T60p"),
+		HDAPS_DMI_MATCH_INVERT("LENOVO","ThinkPad T60"),
 		HDAPS_DMI_MATCH_INVERT("LENOVO","ThinkPad X60"),
 		{ .ident = NULL }
 	};
