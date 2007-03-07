@@ -1,0 +1,8 @@
+config THINKPAD_EC
+	tristate
+	depends on X86
+	  ---help---
+	  This is a low-level driver for accessing the ThinkPad H8S embedded
+	  controller over the LPC bus (not to be confused with the ACPI Embedded
+	  Controller interface).
+

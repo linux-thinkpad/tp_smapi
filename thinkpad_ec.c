@@ -6,11 +6,12 @@
  *  The interface provides various system management services (currently
  *  known: battery information and accelerometer readouts). This driver
  *  provides access and mutual exclusion for the EC interface.
- *  For information about the LPC protocol and terminology, see:
+*
+ *  The LPC protocol and terminology is documented here:
  *  "H8S/2104B Group Hardware Manual",
  * http://documentation.renesas.com/eng/products/mpumcu/rej09b0300_2140bhm.pdf
  *
- *  Copyright (C) 2006 Shem Multinymous <multinymous@gmail.com>
+ *  Copyright (C) 2006-2007 Shem Multinymous <multinymous@gmail.com>
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -37,7 +38,7 @@
 #include <asm/semaphore.h>
 #include <asm/io.h>
 
-#define TP_VERSION "0.31"
+#define TP_VERSION "0.32"
 
 MODULE_AUTHOR("Shem Multinymous");
 MODULE_DESCRIPTION("ThinkPad embedded controller hardware access");
@@ -125,7 +126,14 @@ void thinkpad_ec_unlock(void)
 
 EXPORT_SYMBOL_GPL(thinkpad_ec_unlock);
 
-/* Tell embedded controller to prepare a row */
+/**
+ * thinkpad_ec_request_row - tell embedded controller to prepare a row
+ * @args Input register arguments
+ *
+ * Requests a data row by writing to H8S LPC registers TRW0 through TWR15 (or
+ * a subset thereof) following the protocol prescribed by the "H8S/2104B Group
+*  Hardware Manual". Does sanity checks via status register STR3.
+ */
 static int thinkpad_ec_request_row(const struct thinkpad_ec_row *args)
 {
 	u8 str3;
@@ -193,8 +201,13 @@ static int thinkpad_ec_request_row(const struct thinkpad_ec_row *args)
 	return -EIO;
 }
 
-/* Read current row data from the controller, assuming it's already
- * requested.
+/**
+ * thinkpad_ec_read_data - read pre-requested row-data from EC
+ * @args Input register arguments of pre-requested rows
+ * @data Output register values
+ *
+ * Reads current row data from the controller, assuming it's already
+ * requested. Follows the H8S spec for register access and status checks.
  */
 static int thinkpad_ec_read_data(const struct thinkpad_ec_row *args,
                                  struct thinkpad_ec_row *data)
@@ -383,9 +396,13 @@ EXPORT_SYMBOL_GPL(thinkpad_ec_invalidate);
 
 /*** Checking for EC hardware ***/
 
-/* thinkpad_ec_test:
+/**
+ * thinkpad_ec_test - verify the EC is present and follows protocol
+ *
  * Ensure the EC LPC3 channel really works on this machine by making
- * an arbitrary harmless EC request and seeing if the EC follows protocol.
+ * an EC request and seeing if the EC follows the documented H8S protocol.
+ * The requested row just reads battery status, so it should be harmless to
+ * access it (on a correct EC).
  * This test writes to IO ports, so execute only after checking DMI.
  */
 static int __init thinkpad_ec_test(void)
@@ -431,13 +448,8 @@ static int __init check_dmi_for_ec(void)
 		TP_DMI_MATCH("IBM","ThinkPad X24"),
 		{ .ident = NULL }
 	};
-#include "dmi_ec_oem_string.h"
-#ifdef DMI_EC_OEM_STRING_KLUDGE
-	return (strstr(DMI_EC_OEM_STRING_KLUDGE, "IBM ThinkPad Embedded Controller")) ||
-#else
 	return dmi_find_substring(DMI_DEV_TYPE_OEM_STRING,
 	                          "IBM ThinkPad Embedded Controller") ||
-#endif
 	       dmi_check_system(tp_whitelist);
 }
 

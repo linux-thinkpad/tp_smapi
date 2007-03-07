@@ -1,0 +1,18 @@
+Ideas for improvement
+---------------------
+(The best way to get these done is to send a patch.)
+
+Don't create /sys files for unsupported functions, and don't access those
+functions on suspend+resume (requires probing on module load or a huge 
+white/blacklist).
+
+Make inhibit_charge_minutes return the time left, not the time originally
+set (as returned by the SMAPI BIOS). Requires remembering when 
+inhibit_charge_minutes was set and comparing to current time.
+
+Save and and restore inhibit_charge_minutes across suspend-to-disk, as done
+for charge thresholds (requires the above time calculations too).
+
+Use the new Linux battery model considered (not yet merged into mainline).
+
+Stop hdaps sampling when neither input devices nor sysfs are being accessed.

@@ -1,0 +1,12 @@
+config TP_SMAPI
+	tristate "ThinkPad SMAPI Support"
+	depends on X86
+	select THINKPAD_EC
+	default n
+	help
+	  This adds SMAPI support on IBM ThinkPads, mostly used for battery
+	  charge control. For more information about this driver see
+	  <http://www.thinkwiki.org/wiki/tp_smapi>.
+
+	  If you have an IBM ThinkPad laptop, say Y or M here.
+

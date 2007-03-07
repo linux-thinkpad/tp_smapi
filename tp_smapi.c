@@ -41,7 +41,7 @@
 #include <asm/uaccess.h>
 #include <asm/io.h>
 
-#define TP_VERSION "0.31"
+#define TP_VERSION "0.32"
 #define TP_DESC "ThinkPad SMAPI Support"
 #define TP_DIR "smapi"
 
@@ -75,8 +75,6 @@ MODULE_PARM_DESC(debug, "Debug level (0=off, 1=on)");
 #define SMAPI_SET_FORCE_DISCHARGE               0x2119
 #define SMAPI_GET_THRESH_STOP                   0x211a
 #define SMAPI_SET_THRESH_STOP                   0x211b
-#define SMAPI_GET_PCI_BUS_POWER_SAVING          0x4004
-#define SMAPI_SET_PCI_BUS_POWER_SAVING          0x4005
 
 /* SMAPI error codes (see ThinkPad 770 Technical Reference Manual p.83 at
  http://www-307.ibm.com/pc/support/site.wss/document.do?lndocid=PFAN-3TUQQD */
@@ -439,51 +437,6 @@ static int set_force_discharge(int bat, int enabled)
 	return ret;
 }
 
-/**
- * get_enable_pci_power_saving_on_boot - get PCI power enable status via SMAPI
- * @on: 1 iff PCI bus power saving will be enabled in the next reboot
- */
-static int get_enable_pci_power_saving_on_boot(int *on)
-{
-	u32 ebx, esi;
-	const char* msg;
-	int ret = smapi_request(SMAPI_GET_PCI_BUS_POWER_SAVING, 0,0,0,
-	                        &ebx, NULL, NULL, NULL, &esi, &msg);
-	if (ret) {
-		TPRINTK(KERN_NOTICE, "failed: %s",msg);
-		return ret;
-	}
-	if (!(ebx & 0x00000001)) {
-		TPRINTK(KERN_NOTICE, "unknown status ebx==0x%x esi==0x%x",
-                       ebx, esi);
-		return -EIO;
-	}
-	*on = esi & 0x00000001;
-	return 0;	
-}
-
-/**
- * set_enable_pci_power_saving_on_boot - set PCI power enable status via SMAPI
- * @on: 1 iff PCI bus power saving should be enabled in the next reboot
- */
-static int set_enable_pci_power_saving_on_boot(int on)
-{
-	u32 ecx, edi, esi;
-	const char* msg;
-	int ret = smapi_request(SMAPI_GET_PCI_BUS_POWER_SAVING, 0,0,0,
-	                        NULL, &ecx, NULL, &edi, &esi, &msg);
-	if (ret) {
-		TPRINTK(KERN_NOTICE, "get failed: %s", msg);
-		return ret;
-	}
-
-	esi = (esi & 0xFFFE) | (on ? 0x0001 : 0x0000);
-	ret = smapi_write(SMAPI_SET_PCI_BUS_POWER_SAVING,
-	                  ecx, edi, esi, &msg);
-	if (ret)
-		TPRINTK(KERN_NOTICE, "set failed: %s", msg);
-	return ret;
-}
 
 /*********************************************************************
  * Wrappers to threshold-related SMAPI functions, which handle default
@@ -1142,29 +1095,6 @@ static ssize_t show_ac_connected(
 	return sprintf(buf, "%d\n", ret);  /* type: boolean */
 }
 
-static ssize_t show_enable_pci_power_saving_on_boot(
-	struct device *dev, struct device_attribute *attr, char *buf)
-{
-	int on;
-	int ret = get_enable_pci_power_saving_on_boot(&on);
-	if (ret)
-		return ret;
-	return sprintf(buf, "%d\n", on);  /* type: boolean */
-}
-
-static ssize_t store_enable_pci_power_saving_on_boot(struct device *dev,
-	struct device_attribute *attr, const char *buf, size_t count)
-{
-	int ret;
-	int on;
-	if (sscanf(buf, "%d", &on)!=1 || on<0 || on>1)
-		return -EINVAL;
-	ret = set_enable_pci_power_saving_on_boot(on);
-	if (ret)
-		return ret;
-	return count;
-}
-
 /*********************************************************************
  * The the "smapi_request" sysfs attribute executes a raw SMAPI call.
  * You write to make a request and read to get the result. The state
@@ -1268,15 +1198,11 @@ static struct platform_driver tp_driver = {
 /* Attributes in /sys/devices/platform/smapi/ */
 
 static DEVICE_ATTR(ac_connected, 0444, show_ac_connected, NULL);
-static DEVICE_ATTR(enable_pci_power_saving_on_boot, 0644,
-                   show_enable_pci_power_saving_on_boot,
-                   store_enable_pci_power_saving_on_boot);
 static DEVICE_ATTR(smapi_request, 0600, show_smapi_request,
                                         store_smapi_request);
 
 static struct attribute *tp_root_attributes[] = {
 	&dev_attr_ac_connected.attr,
-	&dev_attr_enable_pci_power_saving_on_boot.attr,
 	&dev_attr_smapi_request.attr,
 	NULL
 };

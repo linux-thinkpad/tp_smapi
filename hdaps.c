@@ -32,9 +32,10 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/timer.h>
-#include <linux/jiffies.h>
 #include <linux/dmi.h>
+#include <linux/jiffies.h>
 #include <linux/thinkpad_ec.h>
+#include <linux/pci_ids.h>
 
 /* Embedded controller accelerometer read command and its result: */
 static const struct thinkpad_ec_row ec_accel_args =
@@ -62,9 +63,16 @@ static const struct thinkpad_ec_row ec_accel_args =
 #define HDAPS_INPUT_FLAT	4
 #define KMACT_REMEMBER_PERIOD   (HZ/10) /* keyboard/mouse persistance */
 
+/* Input IDs */
+#define HDAPS_INPUT_VENDOR	PCI_VENDOR_ID_IBM
+#define HDAPS_INPUT_PRODUCT	0x5054 /* "TP", shared with thinkpad_acpi */
+#define HDAPS_INPUT_JS_VERSION	0x6801 /* Joystick emulation input device */
+#define HDAPS_INPUT_RAW_VERSION	0x4801 /* Raw accelerometer input device */
+
 static struct timer_list hdaps_timer;
 static struct platform_device *pdev;
-static struct input_dev *hdaps_idev;
+static struct input_dev *hdaps_idev;     /* joystick-like device with fuzz */
+static struct input_dev *hdaps_idev_raw; /* raw hdaps sensor readouts */
 static unsigned int hdaps_invert;
 static int needs_calibration;
 
@@ -84,6 +92,11 @@ static int rest_x, rest_y;    /* calibrated rest position */
 /* Last time we saw keyboard and mouse activity: */
 static u64 last_keyboard_jiffies = INITIAL_JIFFIES;
 static u64 last_mouse_jiffies = INITIAL_JIFFIES;
+static u64 last_update_jiffies = INITIAL_JIFFIES;
+
+/* input device use count */
+static int hdaps_users;
+static DEFINE_MUTEX(hdaps_users_mtx);
 
 /* Some models require an axis transformation to the standard reprsentation */
 static void transform_axes(int *x, int *y)
@@ -144,6 +157,7 @@ static int __hdaps_update(int fast)
 
 	temperature = data.val[EC_ACCEL_IDX_TEMP1];
 
+	last_update_jiffies = get_jiffies_64();
 	stale_readout = 0;
 	if (needs_calibration) {
 		rest_x = pos_x;
@@ -164,9 +178,11 @@ static int __hdaps_update(int fast)
  */
 static int hdaps_update(void)
 {
+	u64 age = get_jiffies_64() - last_update_jiffies;
 	int total, ret;
-	if (!stale_readout) /* already updated recently? */
-		return 0;
+
+	if (!stale_readout && age < (9*HZ)/(10*sampling_rate)) 
+		return 0; /* already updated recently */
 	for (total=0; total<READ_TIMEOUT_MSECS; total+=RETRY_MSECS) {
 		ret = thinkpad_ec_lock();
 		if (ret)
@@ -419,7 +435,11 @@ static int hdaps_resume(struct platform_device *dev)
 	int ret = hdaps_device_init();
 	if (ret)
 		return ret;
-	mod_timer(&hdaps_timer, jiffies + HZ/sampling_rate);
+
+	mutex_lock(&hdaps_users_mtx);
+	if (hdaps_users)
+		mod_timer(&hdaps_timer, jiffies + HZ/sampling_rate);
+	mutex_unlock(&hdaps_users_mtx);
 	return 0;
 }
 
@@ -471,6 +491,9 @@ keep_active:
 	input_report_abs(hdaps_idev, ABS_X, pos_x - rest_x);
 	input_report_abs(hdaps_idev, ABS_Y, pos_y - rest_y);
 	input_sync(hdaps_idev);
+	input_report_abs(hdaps_idev_raw, ABS_X, pos_x);
+	input_report_abs(hdaps_idev_raw, ABS_Y, pos_y);
+	input_sync(hdaps_idev_raw);
 	mod_timer(&hdaps_timer, jiffies + HZ/sampling_rate);
 }
 
@@ -563,7 +586,7 @@ static ssize_t hdaps_sampling_rate_store(
 	const char *buf, size_t count)
 {
 	int rate, ret;
-	if (sscanf(buf, "%d", &rate) != 1 || rate>HZ || rate<0) {
+	if (sscanf(buf, "%d", &rate) != 1 || rate>HZ || rate<=0) {
 		printk(KERN_WARNING
 		       "must have 0<input_sampling_rate<=HZ=%d\n", HZ);
 		return -EINVAL;
@@ -645,6 +668,28 @@ static ssize_t hdaps_fake_data_mode_show(
 	return sprintf(buf, "%d\n", fake_data_mode);
 }
 
+static int hdaps_mousedev_open(struct input_dev *dev)
+{
+	if (!try_module_get(THIS_MODULE))
+		return -ENODEV;
+
+	mutex_lock(&hdaps_users_mtx);
+	if (hdaps_users++ == 0) /* first input user */
+		mod_timer(&hdaps_timer, jiffies + HZ/sampling_rate);
+	mutex_unlock(&hdaps_users_mtx);
+	return 0;
+}
+
+static void hdaps_mousedev_close(struct input_dev *dev)
+{
+	mutex_lock(&hdaps_users_mtx);
+	if (--hdaps_users == 0) /* no input users left */
+		del_timer_sync(&hdaps_timer);
+	mutex_unlock(&hdaps_users_mtx);
+
+	module_put(THIS_MODULE);
+}
+
 static DEVICE_ATTR(position, 0444, hdaps_position_show, NULL);
 static DEVICE_ATTR(temp1, 0444, hdaps_temp1_show, NULL);
   /* "temp1" instead of "temperature" is hwmon convention */
@@ -685,7 +730,7 @@ static struct attribute_group hdaps_attribute_group = {
 /* Module stuff */
 
 /* hdaps_dmi_match_invert - found an inverted match. */
-static int hdaps_dmi_match_invert(struct dmi_system_id *id)
+static int __init hdaps_dmi_match_invert(struct dmi_system_id *id)
 {
 	hdaps_invert = 1;
 	printk(KERN_INFO "hdaps: %s detected, inverting axes\n",
@@ -693,7 +738,7 @@ static int hdaps_dmi_match_invert(struct dmi_system_id *id)
 	return 1;
 }
 
-#define HDAPS_DMI_MATCH_INVERT(vendor,model)	{	\
+#define HDAPS_DMI_MATCH_INVERT(vendor, model) {		\
 	.ident = vendor " " model,			\
 	.callback = hdaps_dmi_match_invert,		\
 	.matches = {					\
@@ -706,9 +751,7 @@ static int __init hdaps_init(void)
 {
 	int ret;
 
-	/* List of models with abnormal axis configuration.
-	   Note that HDAPS_DMI_MATCH_NORMAL("ThinkPad T42") would match
-	  "ThinkPad T42p", so the order of the entries matters */
+	/* List of models with abnormal axis configuration. */
 	struct dmi_system_id hdaps_whitelist[] = {
 		HDAPS_DMI_MATCH_INVERT("IBM","ThinkPad R50p"),
 		HDAPS_DMI_MATCH_INVERT("IBM","ThinkPad T41p"),
@@ -743,13 +786,26 @@ static int __init hdaps_init(void)
 		goto out_group;
 	}
 
+	hdaps_idev_raw = input_allocate_device();
+	if (!hdaps_idev_raw) {
+		ret = -ENOMEM;
+		goto out_idev_first;
+	}
+
 	/* calibration for the input device (deferred to avoid delay) */
 	needs_calibration = 1;
 
-	/* initialize the input class */
-	hdaps_idev->name = "hdaps";
+	/* initialize the joystick-like fuzzed input device */
+	hdaps_idev->name = "ThinkPad HDAPS joystick emulation";
+	hdaps_idev->phys = "hdaps/input0";
+	hdaps_idev->id.bustype = BUS_HOST;
+	hdaps_idev->id.vendor  = HDAPS_INPUT_VENDOR;
+	hdaps_idev->id.product = HDAPS_INPUT_PRODUCT;
+	hdaps_idev->id.version = HDAPS_INPUT_JS_VERSION;
 	hdaps_idev->cdev.dev = &pdev->dev;
 	hdaps_idev->evbit[0] = BIT(EV_ABS);
+	hdaps_idev->open = hdaps_mousedev_open;
+	hdaps_idev->close = hdaps_mousedev_close;
 	input_set_abs_params(hdaps_idev, ABS_X,
 			-256, 256, HDAPS_INPUT_FUZZ, HDAPS_INPUT_FLAT);
 	input_set_abs_params(hdaps_idev, ABS_Y,
@@ -759,12 +815,32 @@ static int __init hdaps_init(void)
 	if (ret)
 		goto out_idev;
 
-	mod_timer(&hdaps_timer, jiffies + HZ/sampling_rate);
+	/* initialize the raw data input device */
+	hdaps_idev_raw->name = "ThinkPad HDAPS accelerometer data";
+	hdaps_idev_raw->phys = "hdaps/input1";
+	hdaps_idev_raw->id.bustype = BUS_HOST;
+	hdaps_idev_raw->id.vendor  = HDAPS_INPUT_VENDOR;
+	hdaps_idev_raw->id.product = HDAPS_INPUT_PRODUCT;
+	hdaps_idev_raw->id.version = HDAPS_INPUT_RAW_VERSION;
+	hdaps_idev_raw->cdev.dev = &pdev->dev;
+	hdaps_idev_raw->evbit[0] = BIT(EV_ABS);
+	hdaps_idev_raw->open = hdaps_mousedev_open;
+	hdaps_idev_raw->close = hdaps_mousedev_close;
+	input_set_abs_params(hdaps_idev_raw, ABS_X, -32768, 32767, 0, 0);
+	input_set_abs_params(hdaps_idev_raw, ABS_Y, -32768, 32767, 0, 0);
+
+	ret = input_register_device(hdaps_idev_raw);
+	if (ret)
+		goto out_idev_reg_first;
 
 	printk(KERN_INFO "hdaps: driver successfully loaded.\n");
 	return 0;
 
+out_idev_reg_first:
+	input_unregister_device(hdaps_idev);
 out_idev:
+	input_free_device(hdaps_idev_raw);
+out_idev_first:
 	input_free_device(hdaps_idev);
 out_group:
 	sysfs_remove_group(&pdev->dev.kobj, &hdaps_attribute_group);
@@ -780,7 +856,7 @@ out:
 
 static void __exit hdaps_exit(void)
 {
-	del_timer_sync(&hdaps_timer);
+	input_unregister_device(hdaps_idev_raw);
 	input_unregister_device(hdaps_idev);
 	hdaps_device_shutdown(); /* ignore errors, effect is negligible */
 	sysfs_remove_group(&pdev->dev.kobj, &hdaps_attribute_group);

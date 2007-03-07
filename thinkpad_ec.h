@@ -1,6 +1,6 @@
 /*
  *  thinkpad_ec.h - interface to ThinkPad embedded controller LPC3 functions
- * 
+ *
  *  Copyright (C) 2005 Shem Multinymous <multinymous@gmail.com>
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -31,8 +31,8 @@ struct thinkpad_ec_row {
 	u8 val[TP_CONTROLLER_ROW_LEN];
 };
 
-extern int thinkpad_ec_lock(void);
-extern int thinkpad_ec_try_lock(void);
+extern int __must_check thinkpad_ec_lock(void);
+extern int __must_check thinkpad_ec_try_lock(void);
 extern void thinkpad_ec_unlock(void);
 
 extern int thinkpad_ec_read_row(const struct thinkpad_ec_row *args,

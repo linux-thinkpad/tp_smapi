@@ -1,4 +1,4 @@
-tp_smapi version 0.31
+tp_smapi version 0.32
 IBM ThinkPad hardware functions driver
 
 Author:  Shem Multinymous <multinymous@gmail.com>
@@ -208,6 +208,26 @@ Some of the battery status is also visible through ACPI (/proc/acpi/battery/).
 The charging control files (*_charge_thresh, inhibit_charge_minutes and
 force_discrage*) don't have this problem.
 
+Beside resolving the conflict with thinkpad_ec and tp_smapi, the modified hdaps
+has several improvements:
+
+- It fixes reliability and improves support for recent ThinkPad models (*60 and
+  newer), since unlike the mainline driver, it correctly follows the Embedded
+  Controller communication protocol.
+- It provides the ability to control polling rate (and several other parameters).
+- It provides a second input device, which publishes the raw accelerometer
+  measurements (without the fuzzing needed for joystick emulation). This input
+  device can be matched by a udev rule such as the following:
+    KERNEL=="event[0-9]*", ATTRS{phys}=="hdaps/input1",
+    ATTRS{modalias}=="input:b0019v1014p5054e4801-*",
+    SYMLINK+="input/hdaps/accelerometer-event
+
+
+Licensing note: all my changes to the HDAPS driver are licensed under the
+GPL version 2 or, at your option and to the extent allowed by derivation from
+prior works, any later version. My version of hdaps is derived work from the
+mainline version, which at the time of writing is available only under
+GPL version 2.
 
 Bug reporting
 -------------
@@ -227,6 +247,8 @@ README
   This file.
 CHANGES
   Change log.
+TODO
+  Pending improvements.
 Makefile
   Makefile (see "Installation" above).
 tp_smapi.c
@@ -237,30 +259,10 @@ thinkpad_ec.*
 hdaps.c
   Modified version of hdaps.c driver from mainline kernel, patched to use
   thinkpad_ec and several other improvements.
-diff/dmi-decode-and-save-oem-string-information
-  A patch from the kernel -mm series, needed for hardware detection. 
-  If you don't have it, "make load" and "make install" will use a workaround
-  kludge, and the result of "make patch" will include this patch.
 diff/*  (excluding above)    
   Used by "make patch" to create a clean stand-alone patch.
 include/
   Contains a symlink to make gcc happy in kernel builds.
-
-
-Ideas for improvement
----------------------
-(The best way to get these done is to send a patch.)
-
-Don't create /sys files for unsupported functions, and don't access those
-functions on suspend+resume (requires probing on module load or a huge 
-white/blacklist).
-
-Make inhibit_charge_minutes return the time left, not the time originally
-set (as returned by the SMAPI BIOS). Requires remembering when 
-inhibit_charge_minutes was set and comparing to current time.
-
-Save and and restore inhibit_charge_minutes across suspend-to-disk, as done
-for charge thresholds (requires the above time calculations too).
 
 
 More about SMAPI
