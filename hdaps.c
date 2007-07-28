@@ -47,7 +47,7 @@ static const struct thinkpad_ec_row ec_accel_args =
 #define EC_ACCEL_IDX_TEMP1	0x6	/*   device temperature in Celsius */
 					/* Second readout, if READOUTS>=2: */
 #define EC_ACCEL_IDX_XPOS2	0x7	/*   y-axis position word */
-#define EC_ACCEL_IDX_YPOS2	0x9	/*   x-axis pisition word */
+#define EC_ACCEL_IDX_YPOS2	0x9	/*   x-axis position word */
 #define EC_ACCEL_IDX_TEMP2	0xb	/*   device temperature in Celsius */
 #define EC_ACCEL_IDX_QUEUED	0xc	/* Number of queued readouts left */
 #define EC_ACCEL_IDX_KMACT	0xd	/* keyboard or mouse activity */
@@ -73,8 +73,19 @@ static struct timer_list hdaps_timer;
 static struct platform_device *pdev;
 static struct input_dev *hdaps_idev;     /* joystick-like device with fuzz */
 static struct input_dev *hdaps_idev_raw; /* raw hdaps sensor readouts */
-static unsigned int hdaps_invert;
+static unsigned int hdaps_invert;        /* axis orientation (see below) */
 static int needs_calibration;
+
+/* Axis orientation. */
+/* The unnatural bit-representation of inversions is for backward
+ * compatibility with the"invert=1" module parameter.             */
+#define HDAPS_ORIENT_INVERT_XY  0x01   /* Invert both X and Y axes.       */
+#define HDAPS_ORIENT_INVERT_X   0x02   /* Invert the X axis (uninvert if
+                                        * already inverted by INVERT_XY). */
+#define HDAPS_ORIENT_SWAP       0x04   /* Swap the axes. The swap occurs
+                                        * before inverting X or Y.        */
+#define HDAPS_ORIENT_MAX        0x07
+#define HDAPS_ORIENT_INVERT_Y   (HDAPS_ORIENT_INVERT_XY | HDAPS_ORIENT_INVERT_X)
 
 /* Configuration: */
 static int sampling_rate = 50;       /* Sampling rate  */
@@ -98,13 +109,21 @@ static u64 last_update_jiffies = INITIAL_JIFFIES;
 static int hdaps_users;
 static DEFINE_MUTEX(hdaps_users_mtx);
 
-/* Some models require an axis transformation to the standard reprsentation */
+/* Some models require an axis transformation to the standard representation */
 static void transform_axes(int *x, int *y)
 {
-	if (hdaps_invert) {
+	if (hdaps_invert & HDAPS_ORIENT_SWAP) {
+		int z;
+		z = *x;
+		*x = *y;
+		*y = z;
+	}
+	if (hdaps_invert & HDAPS_ORIENT_INVERT_XY) {
 		*x = -*x;
 		*y = -*y;
 	}
+	if (hdaps_invert & HDAPS_ORIENT_INVERT_X)
+		*x = -*x;
 }
 
 /**
@@ -566,7 +585,7 @@ static ssize_t hdaps_invert_store(struct device *dev,
 {
 	int invert;
 
-	if (sscanf(buf, "%d", &invert) != 1 || (invert != 1 && invert != 0))
+	if (sscanf(buf, "%d", &invert) != 1 || invert < 0 || invert > HDAPS_ORIENT_MAX)
 		return -EINVAL;
 
 	hdaps_invert = invert;
@@ -730,17 +749,19 @@ static struct attribute_group hdaps_attribute_group = {
 /* Module stuff */
 
 /* hdaps_dmi_match_invert - found an inverted match. */
-static int __init hdaps_dmi_match_invert(struct dmi_system_id *id)
+static int __init hdaps_dmi_match_invert(const struct dmi_system_id *id)
 {
-	hdaps_invert = 1;
-	printk(KERN_INFO "hdaps: %s detected, inverting axes\n",
-	       id->ident);
+	int orient = (int) id->driver_data;
+	hdaps_invert = orient;
+	printk(KERN_INFO "hdaps: %s detected, setting orientation %d\n",
+	       id->ident, orient);
 	return 1;
 }
 
-#define HDAPS_DMI_MATCH_INVERT(vendor, model) {		\
+#define HDAPS_DMI_MATCH_INVERT(vendor, model, orient) { \
 	.ident = vendor " " model,			\
 	.callback = hdaps_dmi_match_invert,		\
+	.driver_data = (void*) (orient),		\
 	.matches = {					\
 		DMI_MATCH(DMI_BOARD_VENDOR, vendor),	\
 		DMI_MATCH(DMI_PRODUCT_VERSION, model)	\
@@ -753,11 +774,15 @@ static int __init hdaps_init(void)
 
 	/* List of models with abnormal axis configuration. */
 	struct dmi_system_id hdaps_whitelist[] = {
-		HDAPS_DMI_MATCH_INVERT("IBM","ThinkPad R50p"),
-		HDAPS_DMI_MATCH_INVERT("IBM","ThinkPad T41p"),
-		HDAPS_DMI_MATCH_INVERT("IBM","ThinkPad T42p"),
-		HDAPS_DMI_MATCH_INVERT("LENOVO","ThinkPad T60"),
-		HDAPS_DMI_MATCH_INVERT("LENOVO","ThinkPad X60"),
+		HDAPS_DMI_MATCH_INVERT("IBM","ThinkPad R50p", HDAPS_ORIENT_INVERT_XY),
+		HDAPS_DMI_MATCH_INVERT("IBM","ThinkPad T41p", HDAPS_ORIENT_INVERT_XY),
+		HDAPS_DMI_MATCH_INVERT("IBM","ThinkPad T42p", HDAPS_ORIENT_INVERT_XY),
+		HDAPS_DMI_MATCH_INVERT("LENOVO","ThinkPad T60", HDAPS_ORIENT_SWAP | HDAPS_ORIENT_INVERT_Y),
+		HDAPS_DMI_MATCH_INVERT("LENOVO","ThinkPad T61", HDAPS_ORIENT_SWAP),
+		HDAPS_DMI_MATCH_INVERT("LENOVO","ThinkPad X40", HDAPS_ORIENT_INVERT_Y),
+		HDAPS_DMI_MATCH_INVERT("LENOVO","ThinkPad X41", HDAPS_ORIENT_INVERT_Y),
+		HDAPS_DMI_MATCH_INVERT("LENOVO","ThinkPad X60", HDAPS_ORIENT_SWAP | HDAPS_ORIENT_INVERT_X),
+		HDAPS_DMI_MATCH_INVERT("LENOVO","ThinkPad X61s", HDAPS_ORIENT_INVERT_Y),
 		{ .ident = NULL }
 	};
 

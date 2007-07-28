@@ -41,7 +41,7 @@
 #include <asm/uaccess.h>
 #include <asm/io.h>
 
-#define TP_VERSION "0.32"
+#define TP_VERSION "0.33"
 #define TP_DESC "ThinkPad SMAPI Support"
 #define TP_DIR "smapi"
 
@@ -84,7 +84,7 @@ static struct {u8 rc; char *msg; int ret;} smapi_retcode[]=
 	{0x00,"OK",0},
 	{0x53,"SMAPI fuction is not available",-ENXIO},
 	{0x81,"Invalid parameter",-EINVAL},
-	{0x86,"Function is not supported by SMAPI BIOS",-ENOSYS},
+	{0x86,"Function is not supported by SMAPI BIOS",-EOPNOTSUPP},
 	{0x90,"System error",-EIO},
 	{0x91,"System is invalid",-EIO},
 	{0x92,"System is busy,-EBUSY"},
@@ -764,7 +764,7 @@ static ssize_t store_battery_start_charge_thresh(struct device *dev,
 
 	down(&smapi_mutex);
 	ret = get_thresh(bat, THRESH_STOP, &other_thresh);
-	if (ret!=-ENOSYS) {
+	if (ret!=-EOPNOTSUPP) {
 		if (ret) /* other threshold is set? */
 			goto out;
 		ret = get_real_thresh(bat, THRESH_START, NULL);
@@ -806,7 +806,7 @@ static ssize_t store_battery_stop_charge_thresh(struct device *dev,
 
 	down(&smapi_mutex);
 	ret = get_thresh(bat, THRESH_START, &other_thresh);
-	if (ret!=-ENOSYS) { /* other threshold exists? */
+	if (ret!=-EOPNOTSUPP) { /* other threshold exists? */
 		if (ret)
 			goto out;
 		/* this threshold exists? */

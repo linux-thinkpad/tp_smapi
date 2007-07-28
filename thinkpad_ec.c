@@ -38,7 +38,7 @@
 #include <asm/semaphore.h>
 #include <asm/io.h>
 
-#define TP_VERSION "0.32"
+#define TP_VERSION "0.33"
 
 MODULE_AUTHOR("Shem Multinymous");
 MODULE_DESCRIPTION("ThinkPad embedded controller hardware access");
@@ -132,7 +132,7 @@ EXPORT_SYMBOL_GPL(thinkpad_ec_unlock);
  *
  * Requests a data row by writing to H8S LPC registers TRW0 through TWR15 (or
  * a subset thereof) following the protocol prescribed by the "H8S/2104B Group
-*  Hardware Manual". Does sanity checks via status register STR3.
+ * Hardware Manual". Does sanity checks via status register STR3.
  */
 static int thinkpad_ec_request_row(const struct thinkpad_ec_row *args)
 {
@@ -151,15 +151,15 @@ static int thinkpad_ec_request_row(const struct thinkpad_ec_row *args)
 		inb(TPC_TWR15_PORT); /* marks end of previous transaction */
 		if (prefetch_jiffies == TPC_PREFETCH_NONE)
 			printk(KERN_WARNING
-			       REQ_FMT("readout already pending", str3));
+			       REQ_FMT("EC has result from unrequested transaction", str3));
 		return -EBUSY; /* EC will be ready in a few usecs */
 	} else if (str3 == H8S_STR3_SWMF) { /* busy with previous request */
 		if (prefetch_jiffies == TPC_PREFETCH_NONE)
 			printk(KERN_WARNING
-			       REQ_FMT("EC handles previous request", str3));
+			       REQ_FMT("EC is busy with unrequested transaction", str3));
 		return -EBUSY; /* data will be pending in a few usecs */
 	} else if (str3 != 0x00) { /* unexpected status? */
-		printk(KERN_WARNING REQ_FMT("bad initial STR3", str3));
+		printk(KERN_WARNING REQ_FMT("unexpected initial STR3", str3));
 		return -EIO;
 	}
 
@@ -243,16 +243,19 @@ static int thinkpad_ec_read_data(const struct thinkpad_ec_row *args,
 	if (str3 & H8S_STR3_OBF3B)
 		printk(KERN_WARNING
 		       REQ_FMT("OBF3B=1 after read", str3));
-	/* If port 0x161F returns 0x80 too often, the EC may lock up: */
+	/* If port 0x161F returns 0x80 too often, the EC may lock up. Warn: */
 	if (data->val[0xF] == 0x80)
 		printk(KERN_WARNING
 		       REQ_FMT("0x161F reports error", data->val[0xF]));
 	return 0;
 }
 
-/* Is the given row currently prefetched?
+/**
+ * thinkpad_ec_is_row_fetched - is the given row currently prefetched?
+ *
  * To keep things simple we compare only the first and last args;
- * in practice this suffices                                        .*/
+ * this suffices for all known cases.
+ */
 static int thinkpad_ec_is_row_fetched(const struct thinkpad_ec_row *args)
 {
 	return (prefetch_jiffies != TPC_PREFETCH_NONE) &&
@@ -268,13 +271,13 @@ static int thinkpad_ec_is_row_fetched(const struct thinkpad_ec_row *args)
  * @data Output register values
  *
  * Read a data row from the ThinkPad embedded controller LPC3 interface.
- * Does fetching and retrying if needed. The row args are specified by
- * 16 byte arguments, some of which may be missing (but the first is
- * mandatory). These are given in @args->val[], where @args->val[i] is
- * used iff (@args->mask>>i)&1). The rows's data is stored in @data->val[],
- * but is only guaranteed to be valid for indices corresponding to set
- * bit in @data->mask. That is, if (@data->mask>>i)&1==0 then @data->val[i]
- * may not be filled (to save time).
+ * Does fetching and retrying if needed. The row is specified by an
+ * array of 16 bytes, some of which may be undefined (but the first is
+ * mandatory). These bytes are given in @args->val[], where @args->val[i] is
+ * used iff (@args->mask>>i)&1). The resulting row data is stored in
+ * @data->val[], but is only guaranteed to be valid for indices corresponding
+ * to set bit in @data->mask. That is, if @data->mask&(1<<i)==0 then
+ * @data->val[i] is undefined.
  *
  * Returns -EBUSY on transient error and -EIO on abnormal condition.
  * Caller must hold controller lock.
@@ -422,7 +425,7 @@ static int __init thinkpad_ec_test(void)
 /* Search all DMI device names of a given type for a substring */
 static int __init dmi_find_substring(int type, const char *substr)
 {
-	struct dmi_device *dev = NULL;
+	const struct dmi_device *dev = NULL;
 	while ((dev = dmi_find_device(type, NULL, dev))) {
 		if (strstr(dev->name, substr))
 			return 1;

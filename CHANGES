@@ -1,5 +1,37 @@
 Change history for tp_smapi:
 
+0.33  2007-12-22
+---------------------
+- Ported to kernel 2.6.24-rc6.
+  Building on older kernels will cause harmless warnings about pointer types.
+  (Makefile patch contributed by Tim Niemeyer and Whoopie.)
+- README: Document the additional hdaps attributes and the reduced timer
+  interrupts introduced on 0.32.
+-- hdaps: Extends the "invert" parameter to cover all possible axis
+  orientations.
+  The possible values are as follows.
+  Let X,Y denote the hardware readouts.
+  Let R denote the laptop's roll (tilt left/right).
+  Let P denote the laptop's pitch (tilt forward/backward).
+    invert=0:   R= X  P= Y   (same as mainline)
+    invert=1:   R=-X  P=-Y   (same as mainline)
+    invert=2:   R=-X  P= Y   (new)
+    invert=3:   R= X  P=-Y   (new)
+    invert=4:   R= Y  P= X   (new)
+    invert=5:   R=-Y  P=-X   (new)
+    invert=6:   R=-Y  P= X   (new)
+    invert=7:   R= Y  P=-X   (new)
+  It's probably easiest to just try all 8 possibilities and see which yields
+  correct results (e.g., in the hdaps-gl visualisation).
+- hdaps: Adds a whitelist which automatically sets the correct axis orientation
+  for some models. If the value for your model is wrong or missing, you can
+  override it using the "invert parameter". Please also update the tables at
+  http://www.thinkwiki.org/wiki/tp_smapi and
+  http://www.thinkwiki.org/wiki/List_of_DMI_IDs
+  and submit a patch for the whitelist in hdaps.c.
+- tp_smapi: Report EOPNOTSUPP instead of ENOSYS for unimplemented SMAPI
+  functions.
+
 0.32 2007-07-28
 ---------------------
 - hdaps: Added a second input device which publishes the raw sensor position,

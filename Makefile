@@ -22,7 +22,7 @@ endif
 DEBUG := 0
 
 ifneq ($(shell [ -f $(KSRC)/include/linux/aio_abi.h ] && echo 1),1)
-$(error This driver requires kernel 2.6.19 or newer, and matching kernel sources. You may need to set KSRC and KBUILD to find these.)
+$(error This driver requires kernel 2.6.19 or newer, and matching kernel sources. You may need to override KVER=$(KVER) or KSRC=$(KSRC) or KBUILD=$(KBUILD) or MOD_DIR=$(MOD_DIR))
 endif
 
 .PHONY: default clean modules load unload install patch check_hdaps mk-hdaps.diff
@@ -106,7 +106,7 @@ patch:
 	if [ "$(BASE_IN_PATCH)" == 1 ]; then \
 		cp $(PWD)/thinkpad_ec.c $(NEW)/$(TP_DIR)/thinkpad_ec.c &&\
 		cp $(PWD)/thinkpad_ec.h $(NEW)/$(IDIR)/thinkpad_ec.h &&\
-		perl -i -pe 'print `cat $(PWD)/diff/Kconfig-thinkpad_ec.add` if m/^endmenu$$/' $(NEW)/$(TP_DIR)/Kconfig &&\
+		perl -i -pe 'print `cat $(PWD)/diff/Kconfig-thinkpad_ec.add` if m/^(endmenu|endif # MISC_DEVICES)$$/' $(NEW)/$(TP_DIR)/Kconfig &&\
 		sed -i -e '$$aobj-$$(CONFIG_THINKPAD_EC)       += thinkpad_ec.o' $(NEW)/$(TP_DIR)/Makefile \
 	; fi &&\
 	\
@@ -117,7 +117,7 @@ patch:
 	\
 	if [ "$(SMAPI_IN_PATCH)" == 1 ]; then \
 		sed -i -e '$$aobj-$$(CONFIG_TP_SMAPI)          += tp_smapi.o' $(NEW)/$(TP_DIR)/Makefile &&\
-		perl -i -pe 'print `cat $(PWD)/diff/Kconfig-tp_smapi.add` if m/^endmenu$$/' $(NEW)/$(TP_DIR)/Kconfig &&\
+		perl -i -pe 'print `cat $(PWD)/diff/Kconfig-tp_smapi.add` if m/^(endmenu|endif # MISC_DEVICES)$$/' $(NEW)/$(TP_DIR)/Kconfig &&\
 		cp $(PWD)/tp_smapi.c $(NEW)/$(TP_DIR)/tp_smapi.c &&\
 		mkdir -p $(NEW)/Documentation &&\
 		perl -0777 -pe 's/\n(Installation\n---+|Conflict with HDAPS\n---+|Files in this package\n---+|Setting and getting CD-ROM speed:\n).*?\n(?=[^\n]*\n-----)/\n/gs' $(PWD)/README > $(NEW)/Documentation/tp_smapi.txt \
@@ -150,7 +150,7 @@ else
 #####################################################################
 # This part runs as a submake in kernel Makefile context:
 
-CFLAGS := $(CFLAGS) -I$(M)/include
-obj-m  := $(TP_MODULES)
+EXTRA_CFLAGS := $(CFLAGS) -I$(M)/include
+obj-m        := $(TP_MODULES)
 
 endif
