@@ -69,13 +69,6 @@ static const struct thinkpad_ec_row ec_accel_args =
 #define HDAPS_INPUT_JS_VERSION	0x6801 /* Joystick emulation input device */
 #define HDAPS_INPUT_RAW_VERSION	0x4801 /* Raw accelerometer input device */
 
-static struct timer_list hdaps_timer;
-static struct platform_device *pdev;
-static struct input_dev *hdaps_idev;     /* joystick-like device with fuzz */
-static struct input_dev *hdaps_idev_raw; /* raw hdaps sensor readouts */
-static unsigned int hdaps_invert;        /* axis orientation (see below) */
-static int needs_calibration;
-
 /* Axis orientation. */
 /* The unnatural bit-representation of inversions is for backward
  * compatibility with the"invert=1" module parameter.             */
@@ -85,7 +78,16 @@ static int needs_calibration;
 #define HDAPS_ORIENT_SWAP       0x04   /* Swap the axes. The swap occurs
                                         * before inverting X or Y.        */
 #define HDAPS_ORIENT_MAX        0x07
+#define HDAPS_ORIENT_UNDEFINED  0xFF   /* Placeholder during initialization */
 #define HDAPS_ORIENT_INVERT_Y   (HDAPS_ORIENT_INVERT_XY | HDAPS_ORIENT_INVERT_X)
+
+static struct timer_list hdaps_timer;
+static struct platform_device *pdev;
+static struct input_dev *hdaps_idev;     /* joystick-like device with fuzz */
+static struct input_dev *hdaps_idev_raw; /* raw hdaps sensor readouts */
+static unsigned int hdaps_invert = HDAPS_ORIENT_UNDEFINED;
+static int needs_calibration;
+
 
 /* Configuration: */
 static int sampling_rate = 50;       /* Sampling rate  */
@@ -775,18 +777,24 @@ static int __init hdaps_init(void)
 	/* List of models with abnormal axis configuration. */
 	struct dmi_system_id hdaps_whitelist[] = {
 		HDAPS_DMI_MATCH_INVERT("IBM","ThinkPad R50p", HDAPS_ORIENT_INVERT_XY),
+		HDAPS_DMI_MATCH_INVERT("IBM","ThinkPad R60", HDAPS_ORIENT_INVERT_XY),
 		HDAPS_DMI_MATCH_INVERT("IBM","ThinkPad T41p", HDAPS_ORIENT_INVERT_XY),
 		HDAPS_DMI_MATCH_INVERT("IBM","ThinkPad T42p", HDAPS_ORIENT_INVERT_XY),
 		HDAPS_DMI_MATCH_INVERT("LENOVO","ThinkPad T60", HDAPS_ORIENT_SWAP | HDAPS_ORIENT_INVERT_Y),
-		HDAPS_DMI_MATCH_INVERT("LENOVO","ThinkPad T61", HDAPS_ORIENT_SWAP),
+		HDAPS_DMI_MATCH_INVERT("LENOVO","ThinkPad T61", HDAPS_ORIENT_INVERT_XY),
 		HDAPS_DMI_MATCH_INVERT("LENOVO","ThinkPad X40", HDAPS_ORIENT_INVERT_Y),
 		HDAPS_DMI_MATCH_INVERT("LENOVO","ThinkPad X41", HDAPS_ORIENT_INVERT_Y),
 		HDAPS_DMI_MATCH_INVERT("LENOVO","ThinkPad X60", HDAPS_ORIENT_SWAP | HDAPS_ORIENT_INVERT_X),
-		HDAPS_DMI_MATCH_INVERT("LENOVO","ThinkPad X61s", HDAPS_ORIENT_INVERT_Y),
+		// HDAPS_DMI_MATCH_INVERT("LENOVO","ThinkPad X60 Tablet", HDAPS_ORIENT_INVERT_Y),
+		HDAPS_DMI_MATCH_INVERT("LENOVO","ThinkPad X61s", HDAPS_ORIENT_SWAP | HDAPS_ORIENT_INVERT_X),
+		// HDAPS_DMI_MATCH_INVERT("LENOVO","ThinkPad X61 Tablet", HDAPS_ORIENT_SWAP | HDAPS_ORIENT_INVERT_X),
 		{ .ident = NULL }
 	};
 
-	dmi_check_system(hdaps_whitelist); /* default to normal axes */
+	/* Determine axis orientation orientation */
+	if (hdaps_invert == HDAPS_ORIENT_UNDEFINED) /* set by module param? */
+		if (dmi_check_system(hdaps_whitelist) < 1) /* in whitelist? */
+			hdaps_invert = 0; /* default */
 
 	/* Init timer before platform_driver_register, in case of suspend */
 	init_timer(&hdaps_timer);
@@ -894,8 +902,8 @@ static void __exit hdaps_exit(void)
 module_init(hdaps_init);
 module_exit(hdaps_exit);
 
-module_param_named(invert, hdaps_invert, bool, 0);
-MODULE_PARM_DESC(invert, "invert data along each axis");
+module_param_named(invert, hdaps_invert, uint, 0);
+MODULE_PARM_DESC(invert, "axis orientation code");
 
 MODULE_AUTHOR("Robert Love");
 MODULE_DESCRIPTION("IBM Hard Drive Active Protection System (HDAPS) driver");

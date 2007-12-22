@@ -41,7 +41,7 @@
 #include <asm/uaccess.h>
 #include <asm/io.h>
 
-#define TP_VERSION "0.33"
+#define TP_VERSION "0.34"
 #define TP_DESC "ThinkPad SMAPI Support"
 #define TP_DIR "smapi"
 

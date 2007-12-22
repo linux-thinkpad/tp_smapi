@@ -1,5 +1,13 @@
 Change history for tp_smapi:
 
+0.34  2008-01-06
+---------------------
+- hdaps: Fixed handling of "invert" module parameter (make it a uint,
+  and don't let whitelist override module parameter).
+  Contributed by Ostap Cherkashin.
+- hdaps whitelist: change ThinkPad X61s and T61 default orientation.
+  X60 Tablet and X61 Tablet remain wrong until someone reports their DMI ID.
+
 0.33  2007-12-22
 ---------------------
 - Ported to kernel 2.6.24-rc6.
@@ -7,7 +15,7 @@ Change history for tp_smapi:
   (Makefile patch contributed by Tim Niemeyer and Whoopie.)
 - README: Document the additional hdaps attributes and the reduced timer
   interrupts introduced on 0.32.
--- hdaps: Extends the "invert" parameter to cover all possible axis
+- hdaps: Extends the "invert" parameter to cover all possible axis
   orientations.
   The possible values are as follows.
   Let X,Y denote the hardware readouts.
@@ -25,7 +33,7 @@ Change history for tp_smapi:
   correct results (e.g., in the hdaps-gl visualisation).
 - hdaps: Adds a whitelist which automatically sets the correct axis orientation
   for some models. If the value for your model is wrong or missing, you can
-  override it using the "invert parameter". Please also update the tables at
+  override it using the "invert" parameter. Please also update the tables at
   http://www.thinkwiki.org/wiki/tp_smapi and
   http://www.thinkwiki.org/wiki/List_of_DMI_IDs
   and submit a patch for the whitelist in hdaps.c.
