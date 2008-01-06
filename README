@@ -1,4 +1,4 @@
-tp_smapi version 0.34
+tp_smapi version 0.35-test1
 IBM ThinkPad hardware functions driver
 
 Author:  Shem Multinymous <multinymous@gmail.com>
@@ -232,19 +232,22 @@ The modified hdaps driver has several improvements on the one in mainline
 
 - Provides new attributes:
   /sys/devices/platform/hdaps/sampling_rate:
-    This determines the frequency of hardware queries and input device updates.
+    This determines the frequency at which the host queries the embedded
+    controller for accelerometer data (and informs the hdaps input devices).
     Default=50.
   /sys/devices/platform/hdaps/oversampling_ratio:
     When set to X, the embedded controller is told to do physical accelerometer
     measurements at a rate that is X times higher than the rate at which
     the driver reads those measurements (i.e., X*sampling_rate). This
-    reduces sample phase difference is, and useful for the running average
-    filter (see next). Default=5
+    makes the readouts from the embedded controller more fresh, and is also
+    useful for the running average filter (see next). Default=5
   /sys/devices/platform/hdaps/running_avg_filter_order:
     When set to X, reported readouts will be the average of the last X physical
     accelerometer measurements. Current firmware allows 1<=X<=8. Setting to a
-    high value decreases readout fluctuations. The averaging is handled
-    by the embedded controller, so no CPU resources are used. Default=2.
+    high value decreases readout fluctuations. The averaging is handled by the
+    embedded controller, so no CPU resources are used. Higher values make the
+    readouts smoother, since it averages out both sensor noise (good) and abrupt
+    changes (bad). Default=2.
   /sys/devices/platform/hdaps/fake_data_mode:
     If set to 1, enables a test mode where the physical accelerometer readouts
     are replaced with an incrementing counter. This is useful for checking the

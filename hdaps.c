@@ -351,9 +351,15 @@ static int hdaps_check_ec(void)
 	int ret = thinkpad_ec_read_row(&args, &data);
 	if (ret)
 		return  ret;
-	if (data.val[0x1]!=0x00 || data.val[0x2]!=0x60 ||
-	    data.val[0x3]!=0x00 || data.val[0xF]!=0x00)
+	if (!((data.val[0x1]==0x00 && data.val[0x2]==0x60) || // cleanroom spec
+	      (data.val[0x1]==0x01 && data.val[0x2]==0x00)) || // seen on T61
+	    data.val[0x3]!=0x00 || data.val[0xF]!=0x00) {
+		printk(KERN_WARNING
+		       "hdaps_check_ec: bad response (0x%x,0x%x,0x%x,0x%x)\n",
+		       data.val[0x1], data.val[0x2],
+		       data.val[0x3], data.val[0xF]);
 		return -EIO;
+	}
 	return 0;
 }
 
@@ -364,7 +370,7 @@ static int hdaps_check_ec(void)
  * accelerometer.
  * Returns zero on success and negative error code on failure. Can sleep.
  */
-#define ABORT_INIT(msg) printk(KERN_ERR "hdaps init failed at: %s\n", msg)
+#define FAILED_INIT(msg) printk(KERN_ERR "hdaps init failed at: %s\n", msg)
 static int hdaps_device_init(void)
 {
 	int ret;
@@ -375,24 +381,24 @@ static int hdaps_device_init(void)
 		return ret;
 
 	if (hdaps_get_ec_mode(&mode))
-		{ ABORT_INIT("hdaps_get_ec_mode failed"); goto bad; }
+		{ FAILED_INIT("hdaps_get_ec_mode failed"); goto bad; }
 
 	printk(KERN_DEBUG "hdaps: initial mode latch is 0x%02x\n", mode);
 	if (mode==0x00)
-		{ ABORT_INIT("accelerometer not available"); goto bad; }
+		{ FAILED_INIT("accelerometer not available"); goto bad; }
 
 	if (hdaps_check_ec())
-		{ ABORT_INIT("hdaps_check_ec failed"); goto bad; }
+		{ FAILED_INIT("hdaps_check_ec failed"); goto bad; }
 
 	if (hdaps_set_power(1))
-		{ ABORT_INIT("hdaps_set_power failed"); goto bad; }
+		{ FAILED_INIT("hdaps_set_power failed"); goto bad; }
 
 	if (hdaps_set_ec_config(sampling_rate*oversampling_ratio,
 	                        running_avg_filter_order))
-		{ ABORT_INIT("hdaps_set_ec_config failed"); goto bad; }
+		{ FAILED_INIT("hdaps_set_ec_config failed"); goto bad; }
 
 	if (hdaps_set_fake_data_mode(fake_data_mode))
-		{ ABORT_INIT("hdaps_set_fake_data_mode failed"); goto bad; }
+		{ FAILED_INIT("hdaps_set_fake_data_mode failed"); goto bad; }
 
 	thinkpad_ec_invalidate();
 	udelay(200);
@@ -400,7 +406,7 @@ static int hdaps_device_init(void)
 	/* Just prefetch instead of reading, to avoid ~1sec delay on load */
 	ret = thinkpad_ec_prefetch_row(&ec_accel_args);
 	if (ret)
-		{ ABORT_INIT("initial prefetch failed"); goto bad; }
+		{ FAILED_INIT("initial prefetch failed"); goto bad; }
 	goto good;
 bad:
 	thinkpad_ec_invalidate();
@@ -757,7 +763,7 @@ static int __init hdaps_dmi_match_invert(const struct dmi_system_id *id)
 	hdaps_invert = orient;
 	printk(KERN_INFO "hdaps: %s detected, setting orientation %d\n",
 	       id->ident, orient);
-	return 1;
+	return 1; /* stop enumeration */
 }
 
 #define HDAPS_DMI_MATCH_INVERT(vendor, model, orient) { \
@@ -770,26 +776,30 @@ static int __init hdaps_dmi_match_invert(const struct dmi_system_id *id)
 	}						\
 }
 
+/* List of models with abnormal axis configuration. 
+   Note that HDAPS_DMI_MATCH_NORMAL("ThinkPad T42") would match
+   "ThinkPad T42p", and enumeration stops after first match,
+   so the order of the entries matters. */
+struct dmi_system_id __initdata hdaps_whitelist[] = {
+	HDAPS_DMI_MATCH_INVERT("IBM","ThinkPad R50p", HDAPS_ORIENT_INVERT_XY),
+	HDAPS_DMI_MATCH_INVERT("IBM","ThinkPad R60", HDAPS_ORIENT_INVERT_XY),
+	HDAPS_DMI_MATCH_INVERT("IBM","ThinkPad T41p", HDAPS_ORIENT_INVERT_XY),
+	HDAPS_DMI_MATCH_INVERT("IBM","ThinkPad T42p", HDAPS_ORIENT_INVERT_XY),
+	HDAPS_DMI_MATCH_INVERT("LENOVO","ThinkPad T60", HDAPS_ORIENT_INVERT_XY),
+	HDAPS_DMI_MATCH_INVERT("LENOVO","ThinkPad T61", HDAPS_ORIENT_INVERT_XY),
+	HDAPS_DMI_MATCH_INVERT("LENOVO","ThinkPad X40", HDAPS_ORIENT_INVERT_Y),
+	HDAPS_DMI_MATCH_INVERT("LENOVO","ThinkPad X41", HDAPS_ORIENT_INVERT_Y),
+	HDAPS_DMI_MATCH_INVERT("LENOVO","ThinkPad X60 Tablet", HDAPS_ORIENT_INVERT_Y),
+	HDAPS_DMI_MATCH_INVERT("LENOVO","ThinkPad X60s", HDAPS_ORIENT_INVERT_Y),
+	HDAPS_DMI_MATCH_INVERT("LENOVO","ThinkPad X60", HDAPS_ORIENT_SWAP | HDAPS_ORIENT_INVERT_X),
+	HDAPS_DMI_MATCH_INVERT("LENOVO","ThinkPad X61s", HDAPS_ORIENT_SWAP | HDAPS_ORIENT_INVERT_X),
+	HDAPS_DMI_MATCH_INVERT("LENOVO","ThinkPad X61 Tablet", HDAPS_ORIENT_SWAP | HDAPS_ORIENT_INVERT_X),
+	{ .ident = NULL }
+};
+
 static int __init hdaps_init(void)
 {
 	int ret;
-
-	/* List of models with abnormal axis configuration. */
-	struct dmi_system_id hdaps_whitelist[] = {
-		HDAPS_DMI_MATCH_INVERT("IBM","ThinkPad R50p", HDAPS_ORIENT_INVERT_XY),
-		HDAPS_DMI_MATCH_INVERT("IBM","ThinkPad R60", HDAPS_ORIENT_INVERT_XY),
-		HDAPS_DMI_MATCH_INVERT("IBM","ThinkPad T41p", HDAPS_ORIENT_INVERT_XY),
-		HDAPS_DMI_MATCH_INVERT("IBM","ThinkPad T42p", HDAPS_ORIENT_INVERT_XY),
-		HDAPS_DMI_MATCH_INVERT("LENOVO","ThinkPad T60", HDAPS_ORIENT_SWAP | HDAPS_ORIENT_INVERT_Y),
-		HDAPS_DMI_MATCH_INVERT("LENOVO","ThinkPad T61", HDAPS_ORIENT_INVERT_XY),
-		HDAPS_DMI_MATCH_INVERT("LENOVO","ThinkPad X40", HDAPS_ORIENT_INVERT_Y),
-		HDAPS_DMI_MATCH_INVERT("LENOVO","ThinkPad X41", HDAPS_ORIENT_INVERT_Y),
-		HDAPS_DMI_MATCH_INVERT("LENOVO","ThinkPad X60", HDAPS_ORIENT_SWAP | HDAPS_ORIENT_INVERT_X),
-		// HDAPS_DMI_MATCH_INVERT("LENOVO","ThinkPad X60 Tablet", HDAPS_ORIENT_INVERT_Y),
-		HDAPS_DMI_MATCH_INVERT("LENOVO","ThinkPad X61s", HDAPS_ORIENT_SWAP | HDAPS_ORIENT_INVERT_X),
-		// HDAPS_DMI_MATCH_INVERT("LENOVO","ThinkPad X61 Tablet", HDAPS_ORIENT_SWAP | HDAPS_ORIENT_INVERT_X),
-		{ .ident = NULL }
-	};
 
 	/* Determine axis orientation orientation */
 	if (hdaps_invert == HDAPS_ORIENT_UNDEFINED) /* set by module param? */

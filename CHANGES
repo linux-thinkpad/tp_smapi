@@ -1,5 +1,22 @@
 Change history for tp_smapi:
 
+0.35-test1 2008-01-21
+---------------------
+- Allow loading on new T61 firmware that caused an "hdaps_check_ec failed
+  error. Correct operation with this firmware is not yet fully tested.
+- tp_smapi: Added 3 new sysfs attributes:
+  /sys/devices/platform/smapi/BAT0/group0_voltage
+  /sys/devices/platform/smapi/BAT0/group1_voltage
+  /sys/devices/platform/smapi/BAT0/group2_voltage
+  ThinkPad batteries (at least on the 600, X3x, T4x and R5x models) contains
+  3 cell groups in series, where each group consisting of 2 or 3 cells
+  connected in parallel. The voltage of each group is given by these attributes.
+  (The effective performance of the battery is determined by the weakest
+  group, i.e., the one those voltage changes most rapidly during dis/charging.)
+- hdaps whitelist: changed default orientation of ThinkPad X60 Tablet,
+  X61 Tablet and ThinkPad X60s and ThinkPd T60.
+- hdaps: when hdaps_ec_check fails, report the values received from the EC.
+
 0.34  2008-01-06
 ---------------------
 - hdaps: Fixed handling of "invert" module parameter (make it a uint,

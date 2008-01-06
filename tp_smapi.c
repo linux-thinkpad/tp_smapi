@@ -41,7 +41,7 @@
 #include <asm/uaccess.h>
 #include <asm/io.h>
 
-#define TP_VERSION "0.34"
+#define TP_VERSION "0.35-test1"
 #define TP_DESC "ThinkPad SMAPI Support"
 #define TP_DIR "smapi"
 
@@ -948,6 +948,24 @@ static ssize_t show_battery_design_voltage(
 	return show_tp_ec_bat_u16(3, 4, 1, NULL, attr, buf);  /* type: mV */
 }
 
+static ssize_t show_battery_group0_voltage(
+	struct device *dev, struct device_attribute *attr, char *buf)
+{
+	return show_tp_ec_bat_u16(0xA, 8, 1, NULL, attr, buf);  /* type: mV */
+}
+
+static ssize_t show_battery_group1_voltage(
+	struct device *dev, struct device_attribute *attr, char *buf)
+{
+	return show_tp_ec_bat_u16(0xA, 10, 1, NULL, attr, buf);  /* type: mV */
+}
+
+static ssize_t show_battery_group2_voltage(
+	struct device *dev, struct device_attribute *attr, char *buf)
+{
+	return show_tp_ec_bat_u16(0xA, 12, 1, NULL, attr, buf);  /* type: mV */
+}
+
 static ssize_t show_battery_current_now(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
@@ -1235,6 +1253,9 @@ static struct attribute_group tp_root_attribute_group = {
 	_ATTR_R (_BAT, barcoding) \
 	_ATTR_R (_BAT, chemistry) \
 	_ATTR_R (_BAT, voltage) \
+	_ATTR_R (_BAT, group0_voltage) \
+	_ATTR_R (_BAT, group1_voltage) \
+	_ATTR_R (_BAT, group2_voltage) \
 	_ATTR_R (_BAT, current_now) \
 	_ATTR_R (_BAT, current_avg) \
 	_ATTR_R (_BAT, power_now) \

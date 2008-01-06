@@ -38,7 +38,7 @@
 #include <asm/semaphore.h>
 #include <asm/io.h>
 
-#define TP_VERSION "0.34"
+#define TP_VERSION "0.35-test1"
 
 MODULE_AUTHOR("Shem Multinymous");
 MODULE_DESCRIPTION("ThinkPad embedded controller hardware access");
