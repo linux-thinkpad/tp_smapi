@@ -1,4 +1,4 @@
-tp_smapi version 0.35-test1
+tp_smapi version 0.36
 IBM ThinkPad hardware functions driver
 
 Author:  Shem Multinymous <multinymous@gmail.com>
@@ -122,6 +122,7 @@ Misc read-only battery status (see note about HDAPS below):
 # cat /sys/devices/platform/smapi/BAT0/design_capacity
 # cat /sys/devices/platform/smapi/BAT0/voltage
 # cat /sys/devices/platform/smapi/BAT0/design_voltage
+# cat /sys/devices/platform/smapi/BAT0/group{0,1,2,3}_voltage # see below
 # cat /sys/devices/platform/smapi/BAT0/manufacturer
 # cat /sys/devices/platform/smapi/BAT0/model
 # cat /sys/devices/platform/smapi/BAT0/barcoding
@@ -131,15 +132,22 @@ Misc read-only battery status (see note about HDAPS below):
 # cat /sys/devices/platform/smapi/BAT0/first_use_date
 # cat /sys/devices/platform/smapi/BAT0/temperature # in milli-Celsius
 # cat /sys/devices/platform/smapi/ac_connected
+# cat /sys/devices/platform/smapi/BAT0/dump        # see below
 
+The BAT0/group{0,1,2,3}_voltage attribute refers to the separate cell groups
+in each battery. For example, on the ThinkPad 600, X3x, T4x and R5x models,
+the battery contains 3 cell groups in series, where each group consisting of 2
+or 3 cells  connected in parallel. The voltage of each group is given by these
+attributes, and their sum (roughly) equals the "voltage" attribute. 
+(The effective performance of the battery is determined by the weakest group,
+i.e., the one those voltage changes most rapidly during dis/charging.)
 
-You can also get a hex dump of the raw status data, which contains additional data
-now in the above (if you can figure it out). Some unused values are autodetected
-and replaced by "--":
+The "BAT0/dump" attribute gives a a hex dump of the raw status data, which
+contains additional data now in the above (if you can figure it out). Some
+unused values are autodetected and replaced by "--":
 
-# cat /sys/devices/platform/smapi/BAT0/dump  
-
-In all of the above, replace BAT0 with BAT1 to address the 2nd battery.
+In all of the above, replace BAT0 with BAT1 to address the 2nd battery (e.g.
+in the UltraBay).
 
 
 Raw SMAPI calls:

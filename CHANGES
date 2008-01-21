@@ -1,5 +1,14 @@
 Change history for tp_smapi:
 
+0.36 2008-01-27
+---------------------
+- tp_smapi: Added a 4th cell group voltage attribute:
+  /sys/devices/platform/smapi/BAT0/group3_voltage
+- tp_smapi: Reversed order of the group{0,1,2}_voltage attributes.
+- hdaps whitelist: changed default orientation of ThinkPad X61.
+- README: Improve attributes documentation.
+- Sourcecode cleanups.
+
 0.35-test1 2008-01-21
 ---------------------
 - Allow loading on new T61 firmware that caused an "hdaps_check_ec failed

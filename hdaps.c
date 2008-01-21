@@ -39,7 +39,7 @@
 
 /* Embedded controller accelerometer read command and its result: */
 static const struct thinkpad_ec_row ec_accel_args =
-	{ .mask=0x0001, .val={0x11} };
+	{ .mask = 0x0001, .val = {0x11} };
 #define EC_ACCEL_IDX_READOUTS	0x1	/* readouts included in this read */
 					/* First readout, if READOUTS>=1: */
 #define EC_ACCEL_IDX_YPOS1	0x2	/*   y-axis position word */
@@ -74,9 +74,9 @@ static const struct thinkpad_ec_row ec_accel_args =
  * compatibility with the"invert=1" module parameter.             */
 #define HDAPS_ORIENT_INVERT_XY  0x01   /* Invert both X and Y axes.       */
 #define HDAPS_ORIENT_INVERT_X   0x02   /* Invert the X axis (uninvert if
-                                        * already inverted by INVERT_XY). */
+					* already inverted by INVERT_XY). */
 #define HDAPS_ORIENT_SWAP       0x04   /* Swap the axes. The swap occurs
-                                        * before inverting X or Y.        */
+					* before inverting X or Y.        */
 #define HDAPS_ORIENT_MAX        0x07
 #define HDAPS_ORIENT_UNDEFINED  0xFF   /* Placeholder during initialization */
 #define HDAPS_ORIENT_INVERT_Y   (HDAPS_ORIENT_INVERT_XY | HDAPS_ORIENT_INVERT_X)
@@ -92,7 +92,7 @@ static int needs_calibration;
 /* Configuration: */
 static int sampling_rate = 50;       /* Sampling rate  */
 static int oversampling_ratio = 5;   /* Ratio between our sampling rate and
-                                      * EC accelerometer sampling rate      */
+				      * EC accelerometer sampling rate      */
 static int running_avg_filter_order = 2; /* EC running average filter order */
 static int fake_data_mode;           /* Enable EC fake data mode? */
 
@@ -142,8 +142,8 @@ static int __hdaps_update(int fast)
 	int ret;
 
 	data.mask = (1 << EC_ACCEL_IDX_READOUTS) | (1 << EC_ACCEL_IDX_KMACT) |
-	            (3 << EC_ACCEL_IDX_YPOS1)    | (3 << EC_ACCEL_IDX_XPOS1) |
-	            (1 << EC_ACCEL_IDX_TEMP1)    | (1 << EC_ACCEL_IDX_RETVAL);
+		    (3 << EC_ACCEL_IDX_YPOS1)    | (3 << EC_ACCEL_IDX_XPOS1) |
+		    (1 << EC_ACCEL_IDX_TEMP1)    | (1 << EC_ACCEL_IDX_RETVAL);
 	if (fast)
 		ret = thinkpad_ec_try_read_row(&ec_accel_args, &data);
 	else
@@ -163,8 +163,8 @@ static int __hdaps_update(int fast)
 		return -EBUSY; /* no pending readout, try again later */
 
 	/* Parse position data: */
-	pos_x = *(s16*)(data.val+EC_ACCEL_IDX_XPOS1);
-	pos_y = *(s16*)(data.val+EC_ACCEL_IDX_YPOS1);
+	pos_x = *(s16 *)(data.val+EC_ACCEL_IDX_XPOS1);
+	pos_y = *(s16 *)(data.val+EC_ACCEL_IDX_YPOS1);
 	transform_axes(&pos_x, &pos_y);
 
 	/* Keyboard and mouse activity status is cleared as soon as it's read,
@@ -202,9 +202,9 @@ static int hdaps_update(void)
 	u64 age = get_jiffies_64() - last_update_jiffies;
 	int total, ret;
 
-	if (!stale_readout && age < (9*HZ)/(10*sampling_rate)) 
+	if (!stale_readout && age < (9*HZ)/(10*sampling_rate))
 		return 0; /* already updated recently */
-	for (total=0; total<READ_TIMEOUT_MSECS; total+=RETRY_MSECS) {
+	for (total = 0; total < READ_TIMEOUT_MSECS; total += RETRY_MSECS) {
 		ret = thinkpad_ec_lock();
 		if (ret)
 			return ret;
@@ -227,12 +227,12 @@ static int hdaps_update(void)
 static int hdaps_set_power(int on)
 {
 	struct thinkpad_ec_row args =
-		{ .mask=0x0003, .val={0x14, on?0x01:0x00} };
+		{ .mask = 0x0003, .val = {0x14, on?0x01:0x00} };
 	struct thinkpad_ec_row data = { .mask = 0x8000 };
 	int ret = thinkpad_ec_read_row(&args, &data);
 	if (ret)
 		return ret;
-	if (data.val[0xF]!=0x00)
+	if (data.val[0xF] != 0x00)
 		return -EIO;
 	return 0;
 }
@@ -245,12 +245,12 @@ static int hdaps_set_power(int on)
 static int hdaps_set_fake_data_mode(int on)
 {
 	struct thinkpad_ec_row args =
-		{ .mask=0x0007, .val={0x17, 0x83, on?0x01:0x00} };
+		{ .mask = 0x0007, .val = {0x17, 0x83, on?0x01:0x00} };
 	struct thinkpad_ec_row data = { .mask = 0x8000 };
 	int ret = thinkpad_ec_read_row(&args, &data);
 	if (ret)
 		return ret;
-	if (data.val[0xF]!=0x00) {
+	if (data.val[0xF] != 0x00) {
 		printk(KERN_WARNING "failed setting hdaps fake data to %d\n",
 		       on);
 		return -EIO;
@@ -268,23 +268,23 @@ static int hdaps_set_fake_data_mode(int on)
  */
 static int hdaps_set_ec_config(int ec_rate, int order)
 {
-	struct thinkpad_ec_row args = { .mask=0x000F,
-		.val={0x10, (u8)ec_rate, (u8)(ec_rate>>8), order} };
+	struct thinkpad_ec_row args = { .mask = 0x000F,
+		.val = {0x10, (u8)ec_rate, (u8)(ec_rate>>8), order} };
 	struct thinkpad_ec_row data = { .mask = 0x8000 };
 	int ret = thinkpad_ec_read_row(&args, &data);
 	printk(KERN_DEBUG "hdaps: setting ec_rate=%d, filter_order=%d\n",
 	       ec_rate, order);
 	if (ret)
 		return ret;
-	if (data.val[0xF]==0x03) {
+	if (data.val[0xF] == 0x03) {
 		printk(KERN_WARNING "hdaps: config param out of range\n");
 		return -EINVAL;
 	}
-	if (data.val[0xF]==0x06) {
+	if (data.val[0xF] == 0x06) {
 		printk(KERN_WARNING "hdaps: config change already pending\n");
 		return -EBUSY;
 	}
-	if (data.val[0xF]!=0x00) {
+	if (data.val[0xF] != 0x00) {
 		printk(KERN_WARNING "hdaps: config change error, ret=%d\n",
 		      data.val[0xF]);
 		return -EIO;
@@ -301,12 +301,12 @@ static int hdaps_set_ec_config(int ec_rate, int order)
 static int hdaps_get_ec_config(int *ec_rate, int *order)
 {
 	const struct thinkpad_ec_row args =
-		{ .mask=0x0003, .val={0x17, 0x82} };
+		{ .mask = 0x0003, .val = {0x17, 0x82} };
 	struct thinkpad_ec_row data = { .mask = 0x801F };
 	int ret = thinkpad_ec_read_row(&args, &data);
 	if (ret)
 		return ret;
-	if (data.val[0xF]!=0x00)
+	if (data.val[0xF] != 0x00)
 		return -EIO;
 	if (!(data.val[0x1] & 0x01))
 		return -ENXIO; /* accelerometer polling not enabled */
@@ -323,12 +323,13 @@ static int hdaps_get_ec_config(int *ec_rate, int *order)
  */
 static int hdaps_get_ec_mode(u8 *mode)
 {
-	const struct thinkpad_ec_row args = { .mask=0x0001, .val={0x13} };
+	const struct thinkpad_ec_row args =
+		{ .mask = 0x0001, .val = {0x13} };
 	struct thinkpad_ec_row data = { .mask = 0x8002 };
 	int ret = thinkpad_ec_read_row(&args, &data);
 	if (ret)
 		return ret;
-	if (data.val[0xF]!=0x00) {
+	if (data.val[0xF] != 0x00) {
 		printk(KERN_WARNING
 		       "accelerometer not implemented (0x%02x)\n",
 		       data.val[0xF]);
@@ -346,14 +347,14 @@ static int hdaps_get_ec_mode(u8 *mode)
 static int hdaps_check_ec(void)
 {
 	const struct thinkpad_ec_row args =
-		{ .mask=0x0003, .val={0x17, 0x81} };
+		{ .mask = 0x0003, .val = {0x17, 0x81} };
 	struct thinkpad_ec_row data = { .mask = 0x800E };
 	int ret = thinkpad_ec_read_row(&args, &data);
 	if (ret)
 		return  ret;
-	if (!((data.val[0x1]==0x00 && data.val[0x2]==0x60) || // cleanroom spec
-	      (data.val[0x1]==0x01 && data.val[0x2]==0x00)) || // seen on T61
-	    data.val[0x3]!=0x00 || data.val[0xF]!=0x00) {
+	if (!((data.val[0x1] == 0x00 && data.val[0x2] == 0x60) || /* cleanroom spec */
+	      (data.val[0x1] == 0x01 && data.val[0x2] == 0x00)) || /* seen on T61 */
+	    data.val[0x3] != 0x00 || data.val[0xF] != 0x00) {
 		printk(KERN_WARNING
 		       "hdaps_check_ec: bad response (0x%x,0x%x,0x%x,0x%x)\n",
 		       data.val[0x1], data.val[0x2],
@@ -384,7 +385,7 @@ static int hdaps_device_init(void)
 		{ FAILED_INIT("hdaps_get_ec_mode failed"); goto bad; }
 
 	printk(KERN_DEBUG "hdaps: initial mode latch is 0x%02x\n", mode);
-	if (mode==0x00)
+	if (mode == 0x00)
 		{ FAILED_INIT("accelerometer not available"); goto bad; }
 
 	if (hdaps_check_ec())
@@ -394,7 +395,7 @@ static int hdaps_device_init(void)
 		{ FAILED_INIT("hdaps_set_power failed"); goto bad; }
 
 	if (hdaps_set_ec_config(sampling_rate*oversampling_ratio,
-	                        running_avg_filter_order))
+				running_avg_filter_order))
 		{ FAILED_INIT("hdaps_set_ec_config failed"); goto bad; }
 
 	if (hdaps_set_fake_data_mode(fake_data_mode))
@@ -507,7 +508,7 @@ static void hdaps_mousedev_poll(unsigned long unused)
 	ret = __hdaps_update(1); /* fast update, we're in softirq context */
 	thinkpad_ec_unlock();
 	/* Any of "successful", "not yet ready" and "not prefetched"? */
-	if (ret!=0 && ret!=-EBUSY && ret!=-ENODATA) {
+	if (ret != 0 && ret != -EBUSY && ret != -ENODATA) {
 		printk(KERN_ERR
 		       "hdaps: poll failed, disabling updates\n");
 		return;
@@ -593,7 +594,8 @@ static ssize_t hdaps_invert_store(struct device *dev,
 {
 	int invert;
 
-	if (sscanf(buf, "%d", &invert) != 1 || invert < 0 || invert > HDAPS_ORIENT_MAX)
+	if (sscanf(buf, "%d", &invert) != 1 ||
+	    invert < 0 || invert > HDAPS_ORIENT_MAX)
 		return -EINVAL;
 
 	hdaps_invert = invert;
@@ -613,13 +615,13 @@ static ssize_t hdaps_sampling_rate_store(
 	const char *buf, size_t count)
 {
 	int rate, ret;
-	if (sscanf(buf, "%d", &rate) != 1 || rate>HZ || rate<=0) {
+	if (sscanf(buf, "%d", &rate) != 1 || rate > HZ || rate <= 0) {
 		printk(KERN_WARNING
 		       "must have 0<input_sampling_rate<=HZ=%d\n", HZ);
 		return -EINVAL;
 	}
 	ret = hdaps_set_ec_config(rate*oversampling_ratio,
-	                          running_avg_filter_order);
+				  running_avg_filter_order);
 	if (ret)
 		return ret;
 	sampling_rate = rate;
@@ -641,10 +643,10 @@ static ssize_t hdaps_oversampling_ratio_store(
 	const char *buf, size_t count)
 {
 	int ratio, ret;
-	if (sscanf(buf, "%d", &ratio) != 1 || ratio<1)
+	if (sscanf(buf, "%d", &ratio) != 1 || ratio < 1)
 		return -EINVAL;
 	ret = hdaps_set_ec_config(sampling_rate*ratio,
-	                          running_avg_filter_order);
+				  running_avg_filter_order);
 	if (ret)
 		return ret;
 	oversampling_ratio = ratio;
@@ -680,7 +682,7 @@ static ssize_t hdaps_fake_data_mode_store(struct device *dev,
 					  const char *buf, size_t count)
 {
 	int on, ret;
-	if (sscanf(buf, "%d", &on) != 1 || on<0 || on>1)
+	if (sscanf(buf, "%d", &on) != 1 || on < 0 || on > 1)
 		return -EINVAL;
 	ret = hdaps_set_fake_data_mode(on);
 	if (ret)
@@ -720,18 +722,20 @@ static void hdaps_mousedev_close(struct input_dev *dev)
 static DEVICE_ATTR(position, 0444, hdaps_position_show, NULL);
 static DEVICE_ATTR(temp1, 0444, hdaps_temp1_show, NULL);
   /* "temp1" instead of "temperature" is hwmon convention */
-static DEVICE_ATTR(keyboard_activity, 0444, hdaps_keyboard_activity_show, NULL);
+static DEVICE_ATTR(keyboard_activity, 0444,
+		   hdaps_keyboard_activity_show, NULL);
 static DEVICE_ATTR(mouse_activity, 0444, hdaps_mouse_activity_show, NULL);
-static DEVICE_ATTR(calibrate, 0644, hdaps_calibrate_show,hdaps_calibrate_store);
+static DEVICE_ATTR(calibrate, 0644,
+		   hdaps_calibrate_show, hdaps_calibrate_store);
 static DEVICE_ATTR(invert, 0644, hdaps_invert_show, hdaps_invert_store);
 static DEVICE_ATTR(sampling_rate, 0644,
-		hdaps_sampling_rate_show, hdaps_sampling_rate_store);
+		   hdaps_sampling_rate_show, hdaps_sampling_rate_store);
 static DEVICE_ATTR(oversampling_ratio, 0644,
 		   hdaps_oversampling_ratio_show,
 		   hdaps_oversampling_ratio_store);
 static DEVICE_ATTR(running_avg_filter_order, 0644,
-		hdaps_running_avg_filter_order_show,
-		hdaps_running_avg_filter_order_store);
+		   hdaps_running_avg_filter_order_show,
+		   hdaps_running_avg_filter_order_store);
 static DEVICE_ATTR(fake_data_mode, 0644,
 		   hdaps_fake_data_mode_show, hdaps_fake_data_mode_store);
 
@@ -769,31 +773,30 @@ static int __init hdaps_dmi_match_invert(const struct dmi_system_id *id)
 #define HDAPS_DMI_MATCH_INVERT(vendor, model, orient) { \
 	.ident = vendor " " model,			\
 	.callback = hdaps_dmi_match_invert,		\
-	.driver_data = (void*) (orient),		\
+	.driver_data = (void *)(orient),		\
 	.matches = {					\
 		DMI_MATCH(DMI_BOARD_VENDOR, vendor),	\
 		DMI_MATCH(DMI_PRODUCT_VERSION, model)	\
 	}						\
 }
 
-/* List of models with abnormal axis configuration. 
+/* List of models with abnormal axis configuration.
    Note that HDAPS_DMI_MATCH_NORMAL("ThinkPad T42") would match
    "ThinkPad T42p", and enumeration stops after first match,
    so the order of the entries matters. */
 struct dmi_system_id __initdata hdaps_whitelist[] = {
-	HDAPS_DMI_MATCH_INVERT("IBM","ThinkPad R50p", HDAPS_ORIENT_INVERT_XY),
-	HDAPS_DMI_MATCH_INVERT("IBM","ThinkPad R60", HDAPS_ORIENT_INVERT_XY),
-	HDAPS_DMI_MATCH_INVERT("IBM","ThinkPad T41p", HDAPS_ORIENT_INVERT_XY),
-	HDAPS_DMI_MATCH_INVERT("IBM","ThinkPad T42p", HDAPS_ORIENT_INVERT_XY),
-	HDAPS_DMI_MATCH_INVERT("LENOVO","ThinkPad T60", HDAPS_ORIENT_INVERT_XY),
-	HDAPS_DMI_MATCH_INVERT("LENOVO","ThinkPad T61", HDAPS_ORIENT_INVERT_XY),
-	HDAPS_DMI_MATCH_INVERT("LENOVO","ThinkPad X40", HDAPS_ORIENT_INVERT_Y),
-	HDAPS_DMI_MATCH_INVERT("LENOVO","ThinkPad X41", HDAPS_ORIENT_INVERT_Y),
-	HDAPS_DMI_MATCH_INVERT("LENOVO","ThinkPad X60 Tablet", HDAPS_ORIENT_INVERT_Y),
-	HDAPS_DMI_MATCH_INVERT("LENOVO","ThinkPad X60s", HDAPS_ORIENT_INVERT_Y),
-	HDAPS_DMI_MATCH_INVERT("LENOVO","ThinkPad X60", HDAPS_ORIENT_SWAP | HDAPS_ORIENT_INVERT_X),
-	HDAPS_DMI_MATCH_INVERT("LENOVO","ThinkPad X61s", HDAPS_ORIENT_SWAP | HDAPS_ORIENT_INVERT_X),
-	HDAPS_DMI_MATCH_INVERT("LENOVO","ThinkPad X61 Tablet", HDAPS_ORIENT_SWAP | HDAPS_ORIENT_INVERT_X),
+	HDAPS_DMI_MATCH_INVERT("IBM", "ThinkPad R50p", HDAPS_ORIENT_INVERT_XY),
+	HDAPS_DMI_MATCH_INVERT("IBM", "ThinkPad R60", HDAPS_ORIENT_INVERT_XY),
+	HDAPS_DMI_MATCH_INVERT("IBM", "ThinkPad T41p", HDAPS_ORIENT_INVERT_XY),
+	HDAPS_DMI_MATCH_INVERT("IBM", "ThinkPad T42p", HDAPS_ORIENT_INVERT_XY),
+	HDAPS_DMI_MATCH_INVERT("LENOVO", "ThinkPad T60", HDAPS_ORIENT_INVERT_XY),
+	HDAPS_DMI_MATCH_INVERT("LENOVO", "ThinkPad T61", HDAPS_ORIENT_INVERT_XY),
+	HDAPS_DMI_MATCH_INVERT("LENOVO", "ThinkPad X40", HDAPS_ORIENT_INVERT_Y),
+	HDAPS_DMI_MATCH_INVERT("LENOVO", "ThinkPad X41", HDAPS_ORIENT_INVERT_Y),
+	HDAPS_DMI_MATCH_INVERT("LENOVO", "ThinkPad X60 Tablet", HDAPS_ORIENT_INVERT_Y),
+	HDAPS_DMI_MATCH_INVERT("LENOVO", "ThinkPad X60s", HDAPS_ORIENT_INVERT_Y),
+	HDAPS_DMI_MATCH_INVERT("LENOVO", "ThinkPad X60", HDAPS_ORIENT_SWAP | HDAPS_ORIENT_INVERT_X),
+	HDAPS_DMI_MATCH_INVERT("LENOVO", "ThinkPad X61", HDAPS_ORIENT_SWAP | HDAPS_ORIENT_INVERT_X),
 	{ .ident = NULL }
 };
 

@@ -38,7 +38,7 @@
 #include <asm/semaphore.h>
 #include <asm/io.h>
 
-#define TP_VERSION "0.35-test1"
+#define TP_VERSION "0.36"
 
 MODULE_AUTHOR("Shem Multinymous");
 MODULE_DESCRIPTION("ThinkPad embedded controller hardware access");
@@ -72,13 +72,13 @@ MODULE_LICENSE("GPL");
   "thinkpad_ec: %s: " fmt "\n", __func__, ## args
 #define REQ_FMT(msg, code) \
   MSG_FMT("%s: (0x%02x:0x%02x)->0x%02x", \
-          msg, args->val[0x0], args->val[0xF], code)
+	  msg, args->val[0x0], args->val[0xF], code)
 
 /* State of request prefetching: */
 static u8 prefetch_arg0, prefetch_argF;           /* Args of last prefetch */
-static u64 prefetch_jiffies;                      /* time of prefetch, or one of: */
-#define TPC_PREFETCH_NONE   INITIAL_JIFFIES       /* - No prefetch */
-#define TPC_PREFETCH_JUNK   (INITIAL_JIFFIES+1)   /* - Ignore prefetch */
+static u64 prefetch_jiffies;                      /* time of prefetch, or: */
+#define TPC_PREFETCH_NONE   INITIAL_JIFFIES       /*   No prefetch */
+#define TPC_PREFETCH_JUNK   (INITIAL_JIFFIES+1)   /*   Ignore prefetch */
 
 /* Locking: */
 
@@ -96,7 +96,6 @@ int thinkpad_ec_lock(void)
 	ret = down_interruptible(&thinkpad_ec_mutex);
 	return ret;
 }
-
 EXPORT_SYMBOL_GPL(thinkpad_ec_lock);
 
 /**
@@ -110,7 +109,6 @@ int thinkpad_ec_try_lock(void)
 {
 	return down_trylock(&thinkpad_ec_mutex);
 }
-
 EXPORT_SYMBOL_GPL(thinkpad_ec_try_lock);
 
 /**
@@ -121,9 +119,8 @@ EXPORT_SYMBOL_GPL(thinkpad_ec_try_lock);
  */
 void thinkpad_ec_unlock(void)
 {
- 	up(&thinkpad_ec_mutex);
+	up(&thinkpad_ec_mutex);
 }
-
 EXPORT_SYMBOL_GPL(thinkpad_ec_unlock);
 
 /**
@@ -150,13 +147,15 @@ static int thinkpad_ec_request_row(const struct thinkpad_ec_row *args)
 	if (str3 & H8S_STR3_OBF3B) { /* data already pending */
 		inb(TPC_TWR15_PORT); /* marks end of previous transaction */
 		if (prefetch_jiffies == TPC_PREFETCH_NONE)
-			printk(KERN_WARNING
-			       REQ_FMT("EC has result from unrequested transaction", str3));
+			printk(KERN_WARNING REQ_FMT(
+			       "EC has result from unrequested transaction",
+			       str3));
 		return -EBUSY; /* EC will be ready in a few usecs */
 	} else if (str3 == H8S_STR3_SWMF) { /* busy with previous request */
 		if (prefetch_jiffies == TPC_PREFETCH_NONE)
-			printk(KERN_WARNING
-			       REQ_FMT("EC is busy with unrequested transaction", str3));
+			printk(KERN_WARNING REQ_FMT(
+			       "EC is busy with unrequested transaction",
+			       str3));
 		return -EBUSY; /* data will be pending in a few usecs */
 	} else if (str3 != 0x00) { /* unexpected status? */
 		printk(KERN_WARNING REQ_FMT("unexpected initial STR3", str3));
@@ -172,7 +171,7 @@ static int thinkpad_ec_request_row(const struct thinkpad_ec_row *args)
 	}
 
 	/* Send TWR1 through TWR14: */
-	for (i=1; i<TP_CONTROLLER_ROW_LEN-1; i++)
+	for (i = 1; i < TP_CONTROLLER_ROW_LEN-1; i++)
 		if ((args->mask>>i)&1)
 			outb(args->val[i], TPC_TWR0_PORT+i);
 
@@ -183,7 +182,7 @@ static int thinkpad_ec_request_row(const struct thinkpad_ec_row *args)
 	 * Releasing locks before this happens may cause an EC hang
 	 * due to firmware bug!
 	 */
-	for (i=0; i<TPC_REQUEST_RETRIES; i++) {
+	for (i = 0; i < TPC_REQUEST_RETRIES; i++) {
 		str3 = inb(TPC_STR3_PORT) & H8S_STR3_MASK;
 		if (str3 & H8S_STR3_SWMF) /* EC started replying */
 			return 0;
@@ -210,17 +209,17 @@ static int thinkpad_ec_request_row(const struct thinkpad_ec_row *args)
  * requested. Follows the H8S spec for register access and status checks.
  */
 static int thinkpad_ec_read_data(const struct thinkpad_ec_row *args,
-                                 struct thinkpad_ec_row *data)
+				 struct thinkpad_ec_row *data)
 {
 	int i;
 	u8 str3 = inb(TPC_STR3_PORT) & H8S_STR3_MASK;
 	/* Once we make a request, STR3 assumes the sequence of values listed
-         * in the following 'if' as it reads the request and writes its data.
+	 * in the following 'if' as it reads the request and writes its data.
 	 * It takes about a few dozen nanosecs total, with very high variance.
 	 */
-	if (str3==(H8S_STR3_IBF3B|H8S_STR3_MWMF) ||
-	    str3==0x00 ||   /* the 0x00 is indistinguishable from idle EC! */
-	    str3==H8S_STR3_SWMF )
+	if (str3 == (H8S_STR3_IBF3B|H8S_STR3_MWMF) ||
+	    str3 == 0x00 ||  /* the 0x00 is indistinguishable from idle EC! */
+	    str3 == H8S_STR3_SWMF)
 		return -EBUSY; /* not ready yet */
 	/* Finally, the EC signals output buffer full: */
 	if (str3 != (H8S_STR3_OBF3B|H8S_STR3_SWMF)) {
@@ -232,7 +231,7 @@ static int thinkpad_ec_read_data(const struct thinkpad_ec_row *args,
 	/* Read first byte (signals start of read transactions): */
 	data->val[0] = inb(TPC_TWR0_PORT);
 	/* Optionally read 14 more bytes: */
-	for (i=1; i<TP_CONTROLLER_ROW_LEN-1; i++)
+	for (i = 1; i < TP_CONTROLLER_ROW_LEN-1; i++)
 		if ((data->mask >> i)&1)
 			data->val[i] = inb(TPC_TWR0_PORT+i);
 	/* Read last byte from 0x161F (signals end of read transaction): */
@@ -283,7 +282,7 @@ static int thinkpad_ec_is_row_fetched(const struct thinkpad_ec_row *args)
  * Caller must hold controller lock.
  */
 int thinkpad_ec_read_row(const struct thinkpad_ec_row *args,
-                           struct thinkpad_ec_row *data)
+			 struct thinkpad_ec_row *data)
 {
 	int retries, ret;
 
@@ -291,7 +290,7 @@ int thinkpad_ec_read_row(const struct thinkpad_ec_row *args,
 		goto read_row; /* already requested */
 
 	/* Request the row */
-	for (retries=0; retries<TPC_READ_RETRIES; ++retries) {
+	for (retries = 0; retries < TPC_READ_RETRIES; ++retries) {
 		ret = thinkpad_ec_request_row(args);
 		if (!ret)
 			goto read_row;
@@ -304,11 +303,11 @@ int thinkpad_ec_read_row(const struct thinkpad_ec_row *args,
 
 read_row:
 	/* Read the row's data */
-	for (retries=0; retries<TPC_READ_RETRIES; ++retries) {
+	for (retries = 0; retries < TPC_READ_RETRIES; ++retries) {
 		ret = thinkpad_ec_read_data(args, data);
 		if (!ret)
 			goto out;
-		if (ret!=-EBUSY)
+		if (ret != -EBUSY)
 			break;
 		ndelay(TPC_READ_NDELAY);
 	}
@@ -319,7 +318,6 @@ out:
 	prefetch_jiffies = TPC_PREFETCH_JUNK;
 	return ret;
 }
-
 EXPORT_SYMBOL_GPL(thinkpad_ec_read_row);
 
 /**
@@ -336,7 +334,7 @@ EXPORT_SYMBOL_GPL(thinkpad_ec_read_row);
  * Caller must hold controller lock.
  */
 int thinkpad_ec_try_read_row(const struct thinkpad_ec_row *args,
-                               struct thinkpad_ec_row *data)
+			     struct thinkpad_ec_row *data)
 {
 	int ret;
 	if (!thinkpad_ec_is_row_fetched(args)) {
@@ -348,7 +346,6 @@ int thinkpad_ec_try_read_row(const struct thinkpad_ec_row *args,
 	}
 	return ret;
 }
-
 EXPORT_SYMBOL_GPL(thinkpad_ec_try_read_row);
 
 /**
@@ -368,7 +365,7 @@ EXPORT_SYMBOL_GPL(thinkpad_ec_try_read_row);
 int thinkpad_ec_prefetch_row(const struct thinkpad_ec_row *args)
 {
 	int ret;
- 	ret = thinkpad_ec_request_row(args);
+	ret = thinkpad_ec_request_row(args);
 	if (ret) {
 		prefetch_jiffies = TPC_PREFETCH_JUNK;
 	} else {
@@ -378,7 +375,6 @@ int thinkpad_ec_prefetch_row(const struct thinkpad_ec_row *args)
 	}
 	return ret;
 }
-
 EXPORT_SYMBOL_GPL(thinkpad_ec_prefetch_row);
 
 /**
@@ -393,7 +389,6 @@ void thinkpad_ec_invalidate(void)
 {
 	prefetch_jiffies = TPC_PREFETCH_JUNK;
 }
-
 EXPORT_SYMBOL_GPL(thinkpad_ec_invalidate);
 
 
@@ -412,7 +407,7 @@ static int __init thinkpad_ec_test(void)
 {
 	int ret;
 	const struct thinkpad_ec_row args = /* battery 0 basic status */
-	  { .mask=0x8001, .val={0x01,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0x00} };
+	  { .mask = 0x8001, .val = {0x01,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0x00} };
 	struct thinkpad_ec_row data = { .mask = 0x0000 };
 	ret = thinkpad_ec_lock();
 	if (ret)
@@ -446,13 +441,13 @@ static int __init check_dmi_for_ec(void)
 {
 	/* A few old models that have a good EC but don't report it in DMI */
 	struct dmi_system_id tp_whitelist[] = {
-		TP_DMI_MATCH("IBM","ThinkPad A30"),
-		TP_DMI_MATCH("IBM","ThinkPad T23"),
-		TP_DMI_MATCH("IBM","ThinkPad X24"),
+		TP_DMI_MATCH("IBM", "ThinkPad A30"),
+		TP_DMI_MATCH("IBM", "ThinkPad T23"),
+		TP_DMI_MATCH("IBM", "ThinkPad X24"),
 		{ .ident = NULL }
 	};
 	return dmi_find_substring(DMI_DEV_TYPE_OEM_STRING,
-	                          "IBM ThinkPad Embedded Controller") ||
+				  "IBM ThinkPad Embedded Controller") ||
 	       dmi_check_system(tp_whitelist);
 }
 
@@ -461,15 +456,16 @@ static int __init check_dmi_for_ec(void)
 static int __init thinkpad_ec_init(void)
 {
 	if (!check_dmi_for_ec()) {
-		printk(KERN_WARNING "thinkpad_ec: no ThinkPad embedded controller!\n");
+		printk(KERN_WARNING
+		       "thinkpad_ec: no ThinkPad embedded controller!\n");
 		return -ENODEV;
 	}
 
 	if (!request_region(TPC_BASE_PORT, TPC_NUM_PORTS,
-	                    "thinkpad_ec")) {
+			    "thinkpad_ec")) {
 		printk(KERN_ERR "thinkpad_ec: cannot claim io ports %#x-%#x\n",
 		       TPC_BASE_PORT,
-		       TPC_BASE_PORT + TPC_NUM_PORTS -1);
+		       TPC_BASE_PORT + TPC_NUM_PORTS - 1);
 		return -ENXIO;
 	}
 	prefetch_jiffies = TPC_PREFETCH_JUNK;

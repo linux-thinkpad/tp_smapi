@@ -36,9 +36,9 @@ extern int __must_check thinkpad_ec_try_lock(void);
 extern void thinkpad_ec_unlock(void);
 
 extern int thinkpad_ec_read_row(const struct thinkpad_ec_row *args,
-                                struct thinkpad_ec_row *data);
+				struct thinkpad_ec_row *data);
 extern int thinkpad_ec_try_read_row(const struct thinkpad_ec_row *args,
-                                    struct thinkpad_ec_row *mask);
+				    struct thinkpad_ec_row *mask);
 extern int thinkpad_ec_prefetch_row(const struct thinkpad_ec_row *args);
 extern void thinkpad_ec_invalidate(void);
 
