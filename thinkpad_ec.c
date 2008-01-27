@@ -1,15 +1,16 @@
 /*
- *  thinkpad_ec.c - coordinate access to ThinkPad-specific hardware resources
+ *  thinkpad_ec.c - ThinkPad embedded controller LPC3 functions
  *
- *  The embedded controller on ThinkPad laptops has a non-standard interface
- *  at IO ports 0x1600-0x161F (mapped to LCP channel 3 of the H8S chip).
- *  The interface provides various system management services (currently
+ *  The embedded controller on ThinkPad laptops has a non-standard interface,
+ *  where LPC channel 3 of the H8S EC chip is hooked up to IO ports
+ *  0x1600-0x161F and implements (a special case of) the H8S LPC protocol.
+ *  The EC LPC interface provides various system management services (currently
  *  known: battery information and accelerometer readouts). This driver
  *  provides access and mutual exclusion for the EC interface.
 *
  *  The LPC protocol and terminology is documented here:
  *  "H8S/2104B Group Hardware Manual",
- * http://documentation.renesas.com/eng/products/mpumcu/rej09b0300_2140bhm.pdf
+ *  http://documentation.renesas.com/eng/products/mpumcu/rej09b0300_2140bhm.pdf
  *
  *  Copyright (C) 2006-2007 Shem Multinymous <multinymous@gmail.com>
  *
@@ -38,7 +39,7 @@
 #include <asm/semaphore.h>
 #include <asm/io.h>
 
-#define TP_VERSION "0.36"
+#define TP_VERSION "0.37"
 
 MODULE_AUTHOR("Shem Multinymous");
 MODULE_DESCRIPTION("ThinkPad embedded controller hardware access");

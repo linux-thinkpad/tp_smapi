@@ -36,6 +36,7 @@
 #include <linux/jiffies.h>
 #include <linux/thinkpad_ec.h>
 #include <linux/pci_ids.h>
+#include <linux/version.h>
 
 /* Embedded controller accelerometer read command and its result: */
 static const struct thinkpad_ec_row ec_accel_args =
@@ -789,10 +790,12 @@ struct dmi_system_id __initdata hdaps_whitelist[] = {
 	HDAPS_DMI_MATCH_INVERT("IBM", "ThinkPad R60", HDAPS_ORIENT_INVERT_XY),
 	HDAPS_DMI_MATCH_INVERT("IBM", "ThinkPad T41p", HDAPS_ORIENT_INVERT_XY),
 	HDAPS_DMI_MATCH_INVERT("IBM", "ThinkPad T42p", HDAPS_ORIENT_INVERT_XY),
+	HDAPS_DMI_MATCH_INVERT("IBM", "ThinkPad X40", HDAPS_ORIENT_INVERT_Y),
+	HDAPS_DMI_MATCH_INVERT("IBM", "ThinkPad X41", HDAPS_ORIENT_INVERT_Y),
+	HDAPS_DMI_MATCH_INVERT("LENOVO", "ThinkPad R60", HDAPS_ORIENT_INVERT_XY),
+	HDAPS_DMI_MATCH_INVERT("LENOVO", "ThinkPad R61", HDAPS_ORIENT_INVERT_XY),
 	HDAPS_DMI_MATCH_INVERT("LENOVO", "ThinkPad T60", HDAPS_ORIENT_INVERT_XY),
 	HDAPS_DMI_MATCH_INVERT("LENOVO", "ThinkPad T61", HDAPS_ORIENT_INVERT_XY),
-	HDAPS_DMI_MATCH_INVERT("LENOVO", "ThinkPad X40", HDAPS_ORIENT_INVERT_Y),
-	HDAPS_DMI_MATCH_INVERT("LENOVO", "ThinkPad X41", HDAPS_ORIENT_INVERT_Y),
 	HDAPS_DMI_MATCH_INVERT("LENOVO", "ThinkPad X60 Tablet", HDAPS_ORIENT_INVERT_Y),
 	HDAPS_DMI_MATCH_INVERT("LENOVO", "ThinkPad X60s", HDAPS_ORIENT_INVERT_Y),
 	HDAPS_DMI_MATCH_INVERT("LENOVO", "ThinkPad X60", HDAPS_ORIENT_SWAP | HDAPS_ORIENT_INVERT_X),
@@ -848,7 +851,9 @@ static int __init hdaps_init(void)
 	hdaps_idev->id.vendor  = HDAPS_INPUT_VENDOR;
 	hdaps_idev->id.product = HDAPS_INPUT_PRODUCT;
 	hdaps_idev->id.version = HDAPS_INPUT_JS_VERSION;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,25)
 	hdaps_idev->cdev.dev = &pdev->dev;
+#endif
 	hdaps_idev->evbit[0] = BIT(EV_ABS);
 	hdaps_idev->open = hdaps_mousedev_open;
 	hdaps_idev->close = hdaps_mousedev_close;
@@ -868,7 +873,9 @@ static int __init hdaps_init(void)
 	hdaps_idev_raw->id.vendor  = HDAPS_INPUT_VENDOR;
 	hdaps_idev_raw->id.product = HDAPS_INPUT_PRODUCT;
 	hdaps_idev_raw->id.version = HDAPS_INPUT_RAW_VERSION;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,25)
 	hdaps_idev_raw->cdev.dev = &pdev->dev;
+#endif
 	hdaps_idev_raw->evbit[0] = BIT(EV_ABS);
 	hdaps_idev_raw->open = hdaps_mousedev_open;
 	hdaps_idev_raw->close = hdaps_mousedev_close;

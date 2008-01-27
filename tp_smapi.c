@@ -9,6 +9,10 @@
  *  It also exposes battery status information, obtained from the ThinkPad
  *  embedded controller (via the thinkpad_ec module).
  *
+ *  Many of the battery status values obtained from the EC simply mirror
+ *  values provided by the battery's Smart Battery System (SBS) interface, so
+ *  their meaning is defined by the Smart Battery Data Specification.
+ *  References to this SBS spec are given in the code where relevant.
  *
  *  Copyright (C) 2006 Shem Multinymous <multinymous@gmail.com>.
  *  SMAPI access code based on the mwave driver by Mike Sullivan.
@@ -41,7 +45,7 @@
 #include <asm/uaccess.h>
 #include <asm/io.h>
 
-#define TP_VERSION "0.36"
+#define TP_VERSION "0.37"
 #define TP_DESC "ThinkPad SMAPI Support"
 #define TP_DIR "smapi"
 
@@ -685,7 +689,7 @@ static ssize_t show_tp_ec_bat_power(u8 arg0, int offV, int offI,
 		return ret;
 	millivolt = *(u16 *)(row+offV);
 	milliamp = *(s16 *)(row+offI);
-	return sprintf(buf, "%d\n", milliamp*millivolt/1000); /* type: mW */
+	return sprintf(buf, "%d\n", milliamp*millivolt/1000); /* units: mW */
 }
 
 /**
@@ -732,7 +736,7 @@ static ssize_t show_battery_start_charge_thresh(struct device *dev,
 	int ret = get_thresh(bat, THRESH_START, &thresh);
 	if (ret)
 		return ret;
-	return sprintf(buf, "%d\n", thresh);  /* type: percent */
+	return sprintf(buf, "%d\n", thresh);  /* units: percent */
 }
 
 static ssize_t show_battery_stop_charge_thresh(struct device *dev,
@@ -743,7 +747,7 @@ static ssize_t show_battery_stop_charge_thresh(struct device *dev,
 	int ret = get_thresh(bat, THRESH_STOP, &thresh);
 	if (ret)
 		return ret;
-	return sprintf(buf, "%d\n", thresh);  /* type: percent */
+	return sprintf(buf, "%d\n", thresh);  /* units: percent */
 }
 
 /**
@@ -840,7 +844,7 @@ static ssize_t show_battery_inhibit_charge_minutes(struct device *dev,
 	int ret = get_inhibit_charge_minutes(bat, &minutes);
 	if (ret)
 		return ret;
-	return sprintf(buf, "%d\n", minutes);  /* type: minutes */
+	return sprintf(buf, "%d\n", minutes);  /* units: minutes */
 }
 
 static ssize_t store_battery_inhibit_charge_minutes(struct device *dev,
@@ -920,154 +924,197 @@ static ssize_t show_battery_state(
 static ssize_t show_battery_manufacturer(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
+	/* type: string. SBS spec v1.1 p34: ManufacturerName() */
 	return show_tp_ec_bat_str(4, 2, TP_CONTROLLER_ROW_LEN-2, attr, buf);
 }
 
 static ssize_t show_battery_model(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
+	/* type: string. SBS spec v1.1 p34: DeviceName() */
 	return show_tp_ec_bat_str(5, 2, TP_CONTROLLER_ROW_LEN-2, attr, buf);
 }
 
 static ssize_t show_battery_barcoding(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
+	/* type: string */
 	return show_tp_ec_bat_str(7, 2, TP_CONTROLLER_ROW_LEN-2, attr, buf);
 }
 
 static ssize_t show_battery_chemistry(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
+	/* type: string. SBS spec v1.1 p34-35: DeviceChemistry() */
 	return show_tp_ec_bat_str(6, 2, 5, attr, buf);
 }
 
 static ssize_t show_battery_voltage(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
-	return show_tp_ec_bat_u16(1, 6, 1, NULL, attr, buf);  /* type: mV */
+	/* units: mV. SBS spec v1.1 p24: Voltage() */
+	return show_tp_ec_bat_u16(1, 6, 1, NULL, attr, buf);
 }
 
 static ssize_t show_battery_design_voltage(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
-	return show_tp_ec_bat_u16(3, 4, 1, NULL, attr, buf);  /* type: mV */
+	/* units: mV. SBS spec v1.1 p32: DesignVoltage() */
+	return show_tp_ec_bat_u16(3, 4, 1, NULL, attr, buf);
+}
+
+static ssize_t show_battery_charging_max_voltage(
+	struct device *dev, struct device_attribute *attr, char *buf)
+{
+	/* units: mV. SBS spec v1.1 p37,39: ChargingVoltage() */
+	return show_tp_ec_bat_u16(9, 8, 1, NULL, attr, buf);
 }
 
 static ssize_t show_battery_group0_voltage(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
-	return show_tp_ec_bat_u16(0xA, 12, 1, NULL, attr, buf);  /* type: mV */
+	/* units: mV */
+	return show_tp_ec_bat_u16(0xA, 12, 1, NULL, attr, buf);
 }
 
 static ssize_t show_battery_group1_voltage(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
-	return show_tp_ec_bat_u16(0xA, 10, 1, NULL, attr, buf);  /* type: mV */
+	/* units: mV */
+	return show_tp_ec_bat_u16(0xA, 10, 1, NULL, attr, buf);
 }
 
 static ssize_t show_battery_group2_voltage(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
-	return show_tp_ec_bat_u16(0xA, 8, 1, NULL, attr, buf);  /* type: mV */
+	/* units: mV */
+	return show_tp_ec_bat_u16(0xA, 8, 1, NULL, attr, buf);
 }
 
 static ssize_t show_battery_group3_voltage(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
-	return show_tp_ec_bat_u16(0xA, 6, 1, NULL, attr, buf);  /* type: mV */
+	/* units: mV */
+	return show_tp_ec_bat_u16(0xA, 6, 1, NULL, attr, buf);
 }
 
 static ssize_t show_battery_current_now(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
-	return show_tp_ec_bat_s16(1, 8, 1, 0, attr, buf);  /* type: mA */
+ 	/* units: mA. SBS spec v1.1 p24: Current() */
+	return show_tp_ec_bat_s16(1, 8, 1, 0, attr, buf);
 }
 
 static ssize_t show_battery_current_avg(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
-	return show_tp_ec_bat_s16(1, 10, 1, 0, attr, buf);  /* type: mA */
+	/* units: mA. SBS spec v1.1 p24: AverageCurrent() */
+	return show_tp_ec_bat_s16(1, 10, 1, 0, attr, buf);
+}
+
+static ssize_t show_battery_charging_max_current(
+	struct device *dev, struct device_attribute *attr, char *buf)
+{
+	/* units: mA. SBS spec v1.1 p36,38: ChargingCurrent() */
+	return show_tp_ec_bat_s16(9, 6, 1, 0, attr, buf);
 }
 
 static ssize_t show_battery_power_now(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
-	return show_tp_ec_bat_power(1, 6, 8, attr, buf); /* type: mW */
+	/* units: mW. SBS spec v1.1: Voltage()*Current() */
+	return show_tp_ec_bat_power(1, 6, 8, attr, buf);
 }
 
 static ssize_t show_battery_power_avg(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
-	return show_tp_ec_bat_power(1, 6, 10, attr, buf);  /* type: mW */
+	/* units: mW. SBS spec v1.1: Voltage()*AverageCurrent() */
+	return show_tp_ec_bat_power(1, 6, 10, attr, buf);
 }
 
 static ssize_t show_battery_remaining_percent(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
-	return show_tp_ec_bat_u16(1, 12, 1, NULL, attr, buf); /* type: % */
+	/* units: percent. SBS spec v1.1 p25: RelativeStateOfCharge() */
+	return show_tp_ec_bat_u16(1, 12, 1, NULL, attr, buf);
 }
 
 static ssize_t show_battery_remaining_charging_time(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
-	return show_tp_ec_bat_u16(2, 8, 1, "not_charging",
-				  attr, buf); /* type: minutes */
+	/* units: minutes. SBS spec v1.1 p27: AverageTimeToFull() */
+	return show_tp_ec_bat_u16(2, 8, 1, "not_charging", attr, buf);
 }
 
 static ssize_t show_battery_remaining_running_time(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
-	return show_tp_ec_bat_u16(2, 6, 1, "not_discharging",
-				  attr, buf); /* type: minutes */
+	/* units: minutes. SBS spec v1.1 p27: RunTimeToEmpty() */
+	return show_tp_ec_bat_u16(2, 6, 1, "not_discharging", attr, buf);
+}
+
+static ssize_t show_battery_remaining_running_time_now(
+	struct device *dev, struct device_attribute *attr, char *buf)
+{
+	/* units: minutes. SBS spec v1.1 p27: RunTimeToEmpty() */
+	return show_tp_ec_bat_u16(2, 4, 1, "not_discharging", attr, buf);
 }
 
 static ssize_t show_battery_remaining_capacity(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
-	return show_tp_ec_bat_u16(1, 14, 10, "", attr, buf); /* type: mWh */
+	/* units: mWh. SBS spec v1.1 p26. */
+	return show_tp_ec_bat_u16(1, 14, 10, "", attr, buf);
 }
 
 static ssize_t show_battery_last_full_capacity(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
-	return show_tp_ec_bat_u16(2, 2, 10, "", attr, buf); /* type: mWh */
+	/* units: mWh. SBS spec v1.1 p26: FullChargeCapacity() */
+	return show_tp_ec_bat_u16(2, 2, 10, "", attr, buf);
 }
 
 static ssize_t show_battery_design_capacity(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
-	return show_tp_ec_bat_u16(3, 2, 10, "", attr, buf); /* type: mWh */
+	/* units: mWh. SBS spec v1.1 p32: DesignCapacity() */
+	return show_tp_ec_bat_u16(3, 2, 10, "", attr, buf);
 }
 
 static ssize_t show_battery_cycle_count(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
-	return show_tp_ec_bat_u16(2, 12, 1, "", attr, buf); /* type: ordinal */
+	/* units: ordinal. SBS spec v1.1 p32: CycleCount() */
+	return show_tp_ec_bat_u16(2, 12, 1, "", attr, buf); 
 }
 
 static ssize_t show_battery_temperature(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
+	/* units: millicelsius. SBS spec v1.1: Temperature()*10 */
 	return show_tp_ec_bat_s16(1, 4, 100, -273100, attr, buf);
-	/* type: millicelsius */
 }
 
 static ssize_t show_battery_serial(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
-	return show_tp_ec_bat_u16(3, 10, 1, "", attr, buf); /* type: int */
+	/* type: int. SBS spec v1.1 p34: SerialNumber() */
+	return show_tp_ec_bat_u16(3, 10, 1, "", attr, buf);
 }
 
 static ssize_t show_battery_manufacture_date(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
-	return show_tp_ec_bat_date(3, 8, attr, buf); /* type: YYYY-MM-DD */
+	/* type: YYYY-MM-DD. SBS spec v1.1 p34: ManufactureDate() */
+	return show_tp_ec_bat_date(3, 8, attr, buf);
 }
 
 static ssize_t show_battery_first_use_date(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
-	return show_tp_ec_bat_date(8, 2, attr, buf); /* type: YYYY-MM-DD */
+	/* type: YYYY-MM-DD */
+	return show_tp_ec_bat_date(8, 2, attr, buf);
 }
 
 /**
@@ -1275,14 +1322,17 @@ static struct attribute_group tp_root_attribute_group = {
 	_ATTR_R(_BAT, group3_voltage) \
 	_ATTR_R(_BAT, current_now) \
 	_ATTR_R(_BAT, current_avg) \
+	_ATTR_R(_BAT, charging_max_current) \
 	_ATTR_R(_BAT, power_now) \
 	_ATTR_R(_BAT, power_avg) \
 	_ATTR_R(_BAT, remaining_percent) \
 	_ATTR_R(_BAT, remaining_charging_time) \
 	_ATTR_R(_BAT, remaining_running_time) \
+	_ATTR_R(_BAT, remaining_running_time_now) \
 	_ATTR_R(_BAT, remaining_capacity) \
 	_ATTR_R(_BAT, last_full_capacity) \
 	_ATTR_R(_BAT, design_voltage) \
+	_ATTR_R(_BAT, charging_max_voltage) \
 	_ATTR_R(_BAT, design_capacity) \
 	_ATTR_R(_BAT, cycle_count) \
 	_ATTR_R(_BAT, temperature) \

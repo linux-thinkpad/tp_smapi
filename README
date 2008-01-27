@@ -1,4 +1,4 @@
-tp_smapi version 0.36
+tp_smapi version 0.37
 IBM ThinkPad hardware functions driver
 
 Author:  Shem Multinymous <multinymous@gmail.com>
@@ -105,34 +105,37 @@ Forcing battery discharging even if AC power available:
     (This can be used to control which battery is discharged when using an
      Ultrabay battery.)
 
-Misc read-only battery status (see note about HDAPS below):
+Misc read-only battery status attributes (see note about HDAPS below):
 
-# cat /sys/devices/platform/smapi/BAT0/installed
-# cat /sys/devices/platform/smapi/BAT0/state       # idle/charging/discharging
-# cat /sys/devices/platform/smapi/BAT0/cycle_count
-# cat /sys/devices/platform/smapi/BAT0/current_now # instantaneous current
-# cat /sys/devices/platform/smapi/BAT0/current_avg # last minute average
-# cat /sys/devices/platform/smapi/BAT0/power_now   # instantaneous power
-# cat /sys/devices/platform/smapi/BAT0/power_avg   # last minute average
-# cat /sys/devices/platform/smapi/BAT0/last_full_capacity
-# cat /sys/devices/platform/smapi/BAT0/remaining_percent
-# cat /sys/devices/platform/smapi/BAT0/remaining_running_time
-# cat /sys/devices/platform/smapi/BAT0/remaining_charging_time
-# cat /sys/devices/platform/smapi/BAT0/remaining_capacity
-# cat /sys/devices/platform/smapi/BAT0/design_capacity
-# cat /sys/devices/platform/smapi/BAT0/voltage
-# cat /sys/devices/platform/smapi/BAT0/design_voltage
-# cat /sys/devices/platform/smapi/BAT0/group{0,1,2,3}_voltage # see below
-# cat /sys/devices/platform/smapi/BAT0/manufacturer
-# cat /sys/devices/platform/smapi/BAT0/model
-# cat /sys/devices/platform/smapi/BAT0/barcoding
-# cat /sys/devices/platform/smapi/BAT0/chemistry
-# cat /sys/devices/platform/smapi/BAT0/serial
-# cat /sys/devices/platform/smapi/BAT0/manufacture_date
-# cat /sys/devices/platform/smapi/BAT0/first_use_date
-# cat /sys/devices/platform/smapi/BAT0/temperature # in milli-Celsius
-# cat /sys/devices/platform/smapi/ac_connected
-# cat /sys/devices/platform/smapi/BAT0/dump        # see below
+/sys/devices/platform/smapi/BAT0/installed   # 0 or 1
+/sys/devices/platform/smapi/BAT0/state       # idle/charging/discharging
+/sys/devices/platform/smapi/BAT0/cycle_count # integer counter
+/sys/devices/platform/smapi/BAT0/current_now # instantaneous current
+/sys/devices/platform/smapi/BAT0/current_avg # last minute average
+/sys/devices/platform/smapi/BAT0/power_now   # instantaneous power
+/sys/devices/platform/smapi/BAT0/power_avg   # last minute average
+/sys/devices/platform/smapi/BAT0/last_full_capacity         # in mWh
+/sys/devices/platform/smapi/BAT0/remaining_percent          # remaining percent of energy
+/sys/devices/platform/smapi/BAT0/remaining_running_time     # in minutes, by last minute average power
+/sys/devices/platform/smapi/BAT0/remaining_running_time_now # in minutes, by instantenous power
+/sys/devices/platform/smapi/BAT0/remaining_charging_time    # in minutes
+/sys/devices/platform/smapi/BAT0/remaining_capacity         # in mWh
+/sys/devices/platform/smapi/BAT0/design_capacity            # in mWh
+/sys/devices/platform/smapi/BAT0/voltage           # in mV
+/sys/devices/platform/smapi/BAT0/design_voltage    # in mV
+/sys/devices/platform/smapi/BAT0/charging_max_current  # max charging current
+/sys/devices/platform/smapi/BAT0/charging_max_voltage  # max charging voltage
+/sys/devices/platform/smapi/BAT0/group{0,1,2,3}_voltage # see below
+/sys/devices/platform/smapi/BAT0/manufacturer      # string
+/sys/devices/platform/smapi/BAT0/model             # string
+/sys/devices/platform/smapi/BAT0/barcoding         # string
+/sys/devices/platform/smapi/BAT0/chemistry         # string
+/sys/devices/platform/smapi/BAT0/serial            # integer
+/sys/devices/platform/smapi/BAT0/manufacture_date  # YYYY-MM-DD
+/sys/devices/platform/smapi/BAT0/first_use_date    # YYYY-MM-DD
+/sys/devices/platform/smapi/BAT0/temperature  # in milli-Celsius
+/sys/devices/platform/smapi/BAT0/dump         # see below
+/sys/devices/platform/smapi/ac_connected      # 0 or 1
 
 The BAT0/group{0,1,2,3}_voltage attribute refers to the separate cell groups
 in each battery. For example, on the ThinkPad 600, X3x, T4x and R5x models,

@@ -1,5 +1,18 @@
 Change history for tp_smapi:
 
+0.37 2008-03-28
+---------------------
+- Fix compilation on kernel 2.6.25
+- hdaps whitelist: changed default orientation of ThinkPad R60, R61, X40, X41.
+- tp_smapi: Added 3 new read-only battery attributes
+  /sys/devices/platform/smapi/BAT?/remaining_running_time_now
+    (time remaining according to instantenous power instead of average)
+  /sys/devices/platform/smapi/BAT?/charging_max_current
+    (maximum current allowed during charging)
+  /sys/devices/platform/smapi/BAT?/charging_max_voltage
+    (maximum voltage allowed during charging)
+- tp_smapi and README: improved documentation of battery info attributes.
+
 0.36 2008-01-27
 ---------------------
 - tp_smapi: Added a 4th cell group voltage attribute:
