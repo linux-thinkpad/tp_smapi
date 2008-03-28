@@ -4,15 +4,17 @@
  *  This driver exposes some features of the System Management Application
  *  Program Interface (SMAPI) BIOS found on ThinkPad laptops. It works on
  *  models in which the SMAPI BIOS runs in SMM and is invoked by writing
- *  to the APM control port 0xB2. Older models use a different interface;
- *  for those, try the out-of-tree "thinkpad" module from "tpctl".
+ *  to the APM control port 0xB2.
  *  It also exposes battery status information, obtained from the ThinkPad
  *  embedded controller (via the thinkpad_ec module).
+ *  Ancient ThinkPad models use a different interface, supported by the
+ *  "thinkpad" module from "tpctl".
  *
  *  Many of the battery status values obtained from the EC simply mirror
  *  values provided by the battery's Smart Battery System (SBS) interface, so
- *  their meaning is defined by the Smart Battery Data Specification.
- *  References to this SBS spec are given in the code where relevant.
+ *  their meaning is defined by the Smart Battery Data Specification (see
+ *  http://sbs-forum.org/specs/sbdat110.pdf). References to this SBS spec
+ *  are given in the code where relevant.
  *
  *  Copyright (C) 2006 Shem Multinymous <multinymous@gmail.com>.
  *  SMAPI access code based on the mwave driver by Mike Sullivan.
@@ -45,7 +47,7 @@
 #include <asm/uaccess.h>
 #include <asm/io.h>
 
-#define TP_VERSION "0.37"
+#define TP_VERSION "0.38"
 #define TP_DESC "ThinkPad SMAPI Support"
 #define TP_DIR "smapi"
 
@@ -1040,6 +1042,13 @@ static ssize_t show_battery_remaining_percent(
 	return show_tp_ec_bat_u16(1, 12, 1, NULL, attr, buf);
 }
 
+static ssize_t show_battery_remaining_percent_error(
+	struct device *dev, struct device_attribute *attr, char *buf)
+{
+	/* units: percent. SBS spec v1.1 p25: MaxError() */
+	return show_tp_ec_bat_u16(9, 4, 1, NULL, attr, buf);
+}
+
 static ssize_t show_battery_remaining_charging_time(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
@@ -1326,6 +1335,7 @@ static struct attribute_group tp_root_attribute_group = {
 	_ATTR_R(_BAT, power_now) \
 	_ATTR_R(_BAT, power_avg) \
 	_ATTR_R(_BAT, remaining_percent) \
+	_ATTR_R(_BAT, remaining_percent_error) \
 	_ATTR_R(_BAT, remaining_charging_time) \
 	_ATTR_R(_BAT, remaining_running_time) \
 	_ATTR_R(_BAT, remaining_running_time_now) \

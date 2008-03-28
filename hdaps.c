@@ -95,7 +95,6 @@ static int sampling_rate = 50;       /* Sampling rate  */
 static int oversampling_ratio = 5;   /* Ratio between our sampling rate and
 				      * EC accelerometer sampling rate      */
 static int running_avg_filter_order = 2; /* EC running average filter order */
-static int fake_data_mode;           /* Enable EC fake data mode? */
 
 /* Latest state readout: */
 static int pos_x, pos_y;      /* position */
@@ -239,28 +238,6 @@ static int hdaps_set_power(int on)
 }
 
 /**
- * hdaps_set_fake_data_mode - enable or disable EC test mode
- * EC test mode fakes accelerometer data using an incrementing counter.
- * Returns zero on success and negative error code on failure.  Can sleep.
- */
-static int hdaps_set_fake_data_mode(int on)
-{
-	struct thinkpad_ec_row args =
-		{ .mask = 0x0007, .val = {0x17, 0x83, on?0x01:0x00} };
-	struct thinkpad_ec_row data = { .mask = 0x8000 };
-	int ret = thinkpad_ec_read_row(&args, &data);
-	if (ret)
-		return ret;
-	if (data.val[0xF] != 0x00) {
-		printk(KERN_WARNING "failed setting hdaps fake data to %d\n",
-		       on);
-		return -EIO;
-	}
-	printk(KERN_DEBUG "hdaps: fake_data_mode set to %d\n", on);
-	return 0;
-}
-
-/**
  * hdaps_set_ec_config - set accelerometer parameters.
  * @ec_rate: embedded controller sampling rate
  * @order: embedded controller running average filter order
@@ -398,9 +375,6 @@ static int hdaps_device_init(void)
 	if (hdaps_set_ec_config(sampling_rate*oversampling_ratio,
 				running_avg_filter_order))
 		{ FAILED_INIT("hdaps_set_ec_config failed"); goto bad; }
-
-	if (hdaps_set_fake_data_mode(fake_data_mode))
-		{ FAILED_INIT("hdaps_set_fake_data_mode failed"); goto bad; }
 
 	thinkpad_ec_invalidate();
 	udelay(200);
@@ -678,26 +652,6 @@ static ssize_t hdaps_running_avg_filter_order_store(
 	return count;
 }
 
-static ssize_t hdaps_fake_data_mode_store(struct device *dev,
-					  struct device_attribute *attr,
-					  const char *buf, size_t count)
-{
-	int on, ret;
-	if (sscanf(buf, "%d", &on) != 1 || on < 0 || on > 1)
-		return -EINVAL;
-	ret = hdaps_set_fake_data_mode(on);
-	if (ret)
-		return ret;
-	fake_data_mode = on;
-	return count;
-}
-
-static ssize_t hdaps_fake_data_mode_show(
-	struct device *dev, struct device_attribute *attr, char *buf)
-{
-	return sprintf(buf, "%d\n", fake_data_mode);
-}
-
 static int hdaps_mousedev_open(struct input_dev *dev)
 {
 	if (!try_module_get(THIS_MODULE))
@@ -737,8 +691,6 @@ static DEVICE_ATTR(oversampling_ratio, 0644,
 static DEVICE_ATTR(running_avg_filter_order, 0644,
 		   hdaps_running_avg_filter_order_show,
 		   hdaps_running_avg_filter_order_store);
-static DEVICE_ATTR(fake_data_mode, 0644,
-		   hdaps_fake_data_mode_show, hdaps_fake_data_mode_store);
 
 static struct attribute *hdaps_attributes[] = {
 	&dev_attr_position.attr,
@@ -750,7 +702,6 @@ static struct attribute *hdaps_attributes[] = {
 	&dev_attr_sampling_rate.attr,
 	&dev_attr_oversampling_ratio.attr,
 	&dev_attr_running_avg_filter_order.attr,
-	&dev_attr_fake_data_mode.attr,
 	NULL,
 };
 

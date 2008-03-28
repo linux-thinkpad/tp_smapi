@@ -8,7 +8,7 @@
  *  known: battery information and accelerometer readouts). This driver
  *  provides access and mutual exclusion for the EC interface.
 *
- *  The LPC protocol and terminology is documented here:
+ *  The LPC protocol and terminology are documented here:
  *  "H8S/2104B Group Hardware Manual",
  *  http://documentation.renesas.com/eng/products/mpumcu/rej09b0300_2140bhm.pdf
  *
@@ -36,10 +36,10 @@
 #include <linux/delay.h>
 #include <linux/thinkpad_ec.h>
 #include <linux/jiffies.h>
-#include <asm/semaphore.h>
+#include <linux/semaphore.h>
 #include <asm/io.h>
 
-#define TP_VERSION "0.37"
+#define TP_VERSION "0.38"
 
 MODULE_AUTHOR("Shem Multinymous");
 MODULE_DESCRIPTION("ThinkPad embedded controller hardware access");

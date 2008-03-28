@@ -1,5 +1,14 @@
 Change history for tp_smapi:
 
+0.38 2008-09-26
+---------------------
+- Fixed compilation on kernel 2.6.27-rc7
+- tp_smapi: Added a new battery attribute
+  /sys/devices/platform/smapi/BAT?/remaining_percent_error
+  This is the error margin for the remaing_percent attribute.
+  Unfortunately, it doesn't seem to be reset by battery calibration.
+- hdaps: Removed the fake_data_mode attribute.
+
 0.37 2008-03-28
 ---------------------
 - Fix compilation on kernel 2.6.25

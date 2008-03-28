@@ -1,4 +1,4 @@
-tp_smapi version 0.37
+tp_smapi version 0.38
 IBM ThinkPad hardware functions driver
 
 Author:  Shem Multinymous <multinymous@gmail.com>
@@ -102,8 +102,10 @@ Forcing battery discharging even if AC power available:
 # echo 0 > /sys/devices/platform/smapi/BAT0/force_discharge  # stop discharge
 # cat /sys/devices/platform/smapi/BAT0/force_discharge
 
-    (This can be used to control which battery is discharged when using an
-     Ultrabay battery.)
+    (When AC is connected, forced discharging will automatically stop
+     when battery is fully depleted -- this is useful for calibration.
+     Also, this attribute can be used to control which battery is discharged
+     when both a system battery and an Ultrabay battery are connected.)
 
 Misc read-only battery status attributes (see note about HDAPS below):
 
@@ -115,7 +117,8 @@ Misc read-only battery status attributes (see note about HDAPS below):
 /sys/devices/platform/smapi/BAT0/power_now   # instantaneous power
 /sys/devices/platform/smapi/BAT0/power_avg   # last minute average
 /sys/devices/platform/smapi/BAT0/last_full_capacity         # in mWh
-/sys/devices/platform/smapi/BAT0/remaining_percent          # remaining percent of energy
+/sys/devices/platform/smapi/BAT0/remaining_percent          # remaining percent of energy (set by calibration)
+/sys/devices/platform/smapi/BAT0/remaining_percent_error    # error range of remaing_percent (not reset by calibration)
 /sys/devices/platform/smapi/BAT0/remaining_running_time     # in minutes, by last minute average power
 /sys/devices/platform/smapi/BAT0/remaining_running_time_now # in minutes, by instantenous power
 /sys/devices/platform/smapi/BAT0/remaining_charging_time    # in minutes
@@ -259,10 +262,6 @@ The modified hdaps driver has several improvements on the one in mainline
     embedded controller, so no CPU resources are used. Higher values make the
     readouts smoother, since it averages out both sensor noise (good) and abrupt
     changes (bad). Default=2.
-  /sys/devices/platform/hdaps/fake_data_mode:
-    If set to 1, enables a test mode where the physical accelerometer readouts
-    are replaced with an incrementing counter. This is useful for checking the
-    regularity of the sampling interval and driver<->userspace communication.
 
 - Provides a second input device, which publishes the raw accelerometer
   measurements (without the fuzzing needed for joystick emulation). This input
@@ -330,7 +329,7 @@ For hints about what may be possible via the SMAPI BIOS and how, see:
 * Exported symbols in PWRMGRIF.DLL or TPPWRW32.DLL (e.g., use "objdump -x").
 * drivers/char/mwave/smapi.c in the Linux kernel tree.*
 * The "thinkpad" SMAPI module (http://tpctl.sourceforge.net).
-* The SMAPI_* constants in tp_smapi.c (some of these are presently unused).
+* The SMAPI_* constants in tp_smapi.c.
 
 Note that in the above Technical Reference and in the "thinkpad" module,
 SMAPI is invoked through a function call to some physical address. However,
@@ -347,5 +346,5 @@ In addition, the embedded controller on ThinkPad laptops has a non-standard
 interface at IO ports 0x1600-0x161F (mapped to LCP channel 3 of the H8S chip).
 The interface provides various system management services (currently known: 
 battery information and accelerometer readouts). For more information see the
-thinkpad_ec modul and the H8S hardware documentation:
+thinkpad_ec module and the H8S hardware documentation:
 http://documentation.renesas.com/eng/products/mpumcu/rej09b0300_2140bhm.pdf
