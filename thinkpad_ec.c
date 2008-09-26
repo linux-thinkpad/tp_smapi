@@ -36,10 +36,16 @@
 #include <linux/delay.h>
 #include <linux/thinkpad_ec.h>
 #include <linux/jiffies.h>
-#include <linux/semaphore.h>
 #include <asm/io.h>
 
-#define TP_VERSION "0.38"
+#include <linux/version.h>
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
+	#include <asm/semaphore.h>
+#else
+	#include <linux/semaphore.h>
+#endif
+
+#define TP_VERSION "0.39"
 
 MODULE_AUTHOR("Shem Multinymous");
 MODULE_DESCRIPTION("ThinkPad embedded controller hardware access");
