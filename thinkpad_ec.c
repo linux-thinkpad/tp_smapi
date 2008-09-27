@@ -45,7 +45,7 @@
 	#include <linux/semaphore.h>
 #endif
 
-#define TP_VERSION "0.39"
+#define TP_VERSION "0.40"
 
 MODULE_AUTHOR("Shem Multinymous");
 MODULE_DESCRIPTION("ThinkPad embedded controller hardware access");
@@ -88,8 +88,13 @@ static u64 prefetch_jiffies;                      /* time of prefetch, or: */
 #define TPC_PREFETCH_JUNK   (INITIAL_JIFFIES+1)   /*   Ignore prefetch */
 
 /* Locking: */
-
 static DECLARE_MUTEX(thinkpad_ec_mutex);
+
+/* Kludge in case the ACPI DSDT reserves the ports we need. */
+static int force_io;    /* Willing to do IO to ports we couldn't reserve? */
+static int reserved_io; /* Successfully reserved the ports? */
+module_param_named(force_io, force_io, bool, 0600);
+MODULE_PARM_DESC(force_io, "Force IO even if region already reserved (0=off, 1=on)");
 
 /**
  * thinkpad_ec_lock - get lock on the ThinkPad EC
@@ -468,17 +473,24 @@ static int __init thinkpad_ec_init(void)
 		return -ENODEV;
 	}
 
-	if (!request_region(TPC_BASE_PORT, TPC_NUM_PORTS,
-			    "thinkpad_ec")) {
-		printk(KERN_ERR "thinkpad_ec: cannot claim io ports %#x-%#x\n",
+	if (request_region(TPC_BASE_PORT, TPC_NUM_PORTS, "thinkpad_ec")) {
+		reserved_io = 1;
+	} else {
+		printk(KERN_ERR "thinkpad_ec: cannot claim IO ports %#x-%#x... ",
 		       TPC_BASE_PORT,
 		       TPC_BASE_PORT + TPC_NUM_PORTS - 1);
-		return -ENXIO;
+		if (force_io) {
+			printk("forcing use of unreserved IO ports.\n");
+		} else {
+			printk("consider using force_io=1.\n");
+			return -ENXIO;
+		}
 	}
 	prefetch_jiffies = TPC_PREFETCH_JUNK;
 	if (thinkpad_ec_test()) {
 		printk(KERN_ERR "thinkpad_ec: initial ec test failed\n");
-		release_region(TPC_BASE_PORT, TPC_NUM_PORTS);
+		if (reserved_io)
+			release_region(TPC_BASE_PORT, TPC_NUM_PORTS);
 		return -ENXIO;
 	}
 	printk(KERN_INFO "thinkpad_ec: thinkpad_ec " TP_VERSION " loaded.\n");
@@ -487,7 +499,8 @@ static int __init thinkpad_ec_init(void)
 
 static void __exit thinkpad_ec_exit(void)
 {
-	release_region(TPC_BASE_PORT, TPC_NUM_PORTS);
+	if (reserved_io)
+		release_region(TPC_BASE_PORT, TPC_NUM_PORTS);
 	printk(KERN_INFO "thinkpad_ec: unloaded.\n");
 }
 

@@ -19,10 +19,23 @@ else
 LOAD_HDAPS  := :
 endif
 
+ifeq ($(FORCE_IO),1)
+THINKPAD_EC_PARAM := force_io=1
+else
+THINKPAD_EC_PARAM := 
+endif
+
 DEBUG := 0
 
-ifneq ($(shell [ -f $(KSRC)/include/linux/aio_abi.h ] && echo 1),1)
-$(error This driver requires kernel 2.6.19 or newer, and matching kernel sources. You may need to override KVER=$(KVER) or KSRC=$(KSRC) or KBUILD=$(KBUILD) or MOD_DIR=$(MOD_DIR))
+ifneq ($(shell [ -f $(KBUILD)/include/linux/aio_abi.h ] && echo 1),1)
+$(warning Building tp_smapi requires Linux kernel 2.6.19 or newer, and matching kernel headers.)
+$(warning You may need to override the following Make variables:)
+$(warning .   KVER=$(KVER))
+$(warning .   KBUILD=$(KBUILD))
+$(warning .   MOD_DIR=$(MOD_DIR))
+$(warning For "make patch", you may also need the full kernel sources, and may need to override:)
+$(warning .   KSRC=$(KSRC))
+$(error Missing kernel headers)
 endif
 
 .PHONY: default clean modules load unload install patch check_hdaps mk-hdaps.diff
@@ -34,8 +47,8 @@ export TP_MODULES
 default: modules
 
 # Build the modules thinkpad_ec.ko, tp_smapi.ko and (if HDAPS=1) hdaps.ko
-modules: $(KSRC) $(patsubst %.o,%.c,$(TP_MODULES))
-	$(MAKE) -C $(KSRC) M=$(PWD) O=$(KBUILD) modules
+modules: $(KBUILD) $(patsubst %.o,%.c,$(TP_MODULES))
+	$(MAKE) -C $(KBUILD) M=$(PWD) O=$(KBUILD) modules
 
 clean:
 	rm -f tp_smapi.mod.* tp_smapi.o tp_smapi.ko .tp_smapi.*.cmd
@@ -47,9 +60,7 @@ clean:
 
 load: check_hdaps unload modules
 	@( [ `id -u` == 0 ] || { echo "Must be root to load modules"; exit 1; } )
-	{ insmod ./thinkpad_ec.ko &&\
-	  insmod ./tp_smapi.ko debug=$(DEBUG) &&\
-	  $(LOAD_HDAPS); }; :
+	{ insmod ./thinkpad_ec.ko $(THINKPAD_EC_PARAM) && insmod ./tp_smapi.ko debug=$(DEBUG) && $(LOAD_HDAPS); }; :
 	@echo -e '\nRecent dmesg output:' ; dmesg | tail -10
 
 unload:
@@ -76,7 +87,7 @@ ifeq ($(HDAPS),1)
 	rm -f $(MOD_DIR)/drivers/hwmon/hdaps.ko
 	rm -f $(MOD_DIR)/extra/hdaps.ko
 endif
-	$(MAKE) -C $(KSRC) M=$(PWD) O=$(KBUILD) modules_install
+	$(MAKE) -C $(KBUILD) M=$(PWD) O=$(KBUILD) modules_install
 	depmod -a
 
 
@@ -92,7 +103,7 @@ BASE_IN_PATCH  := 1
 SMAPI_IN_PATCH := 1
 HDAPS_IN_PATCH := 1
 
-patch:
+patch: $(KSRC)
 	@TMPDIR=`mktemp -d /tmp/tp_smapi-patch.XXXXXX` &&\
 	echo "Working directory: $$TMPDIR" &&\
 	cd $$TMPDIR &&\

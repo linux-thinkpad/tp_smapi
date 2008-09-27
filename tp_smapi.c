@@ -47,7 +47,7 @@
 #include <asm/uaccess.h>
 #include <asm/io.h>
 
-#define TP_VERSION "0.39"
+#define TP_VERSION "0.40"
 #define TP_DESC "ThinkPad SMAPI Support"
 #define TP_DIR "smapi"
 
@@ -1238,13 +1238,15 @@ static int saved_threshs[4] = {-1, -1, -1, -1};  /* -1 = don't know */
 
 static int tp_suspend(struct platform_device *dev, pm_message_t state)
 {
-	if (get_real_thresh(0, THRESH_STOP , &saved_threshs[0]))
+	int restore = (state.event == PM_EVENT_HIBERNATE ||
+	               state.event == PM_EVENT_FREEZE);
+	if (!restore || get_real_thresh(0, THRESH_STOP , &saved_threshs[0]))
 		saved_threshs[0] = -1;
-	if (get_real_thresh(0, THRESH_START, &saved_threshs[1]))
+	if (!restore || get_real_thresh(0, THRESH_START, &saved_threshs[1]))
 		saved_threshs[1] = -1;
-	if (get_real_thresh(1, THRESH_STOP , &saved_threshs[2]))
+	if (!restore || get_real_thresh(1, THRESH_STOP , &saved_threshs[2]))
 		saved_threshs[2] = -1;
-	if (get_real_thresh(1, THRESH_START, &saved_threshs[3]))
+	if (!restore || get_real_thresh(1, THRESH_START, &saved_threshs[3]))
 		saved_threshs[3] = -1;
 	DPRINTK("suspend saved: %d %d %d %d", saved_threshs[0],
 		saved_threshs[1], saved_threshs[2], saved_threshs[3]);

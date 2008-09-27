@@ -89,7 +89,6 @@ static struct input_dev *hdaps_idev_raw; /* raw hdaps sensor readouts */
 static unsigned int hdaps_invert = HDAPS_ORIENT_UNDEFINED;
 static int needs_calibration;
 
-
 /* Configuration: */
 static int sampling_rate = 50;       /* Sampling rate  */
 static int oversampling_ratio = 5;   /* Ratio between our sampling rate and

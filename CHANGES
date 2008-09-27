@@ -1,4 +1,14 @@
-Change history for tp_smapi:
+Change history for the tp_smapi package:
+
+0.40 2008-12-16
+---------------------
+- thinkpad_ec: Added a "force_io=1" module parameter, to let it load on
+  recent ThinkPad models (e.g., T400 and T500). This is a kludge to work
+  around an ACPI DSDT which claims the ports we need.
+- tp_smapi: Don't restore battery charging thresholds when resuming from
+  suspend-to-RAM.
+- When building, use /lib/modules/*/build instead of /lib/modules/*/src
+  and give a clearer error message if that's missing.
 
 0.39 2008-09-27
 ---------------------
