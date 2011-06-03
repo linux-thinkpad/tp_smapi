@@ -1,0 +1,478 @@
+--- a/drivers/hwmon/hdaps.c	2006-01-03 05:21:10.000000000 +0000
++++ b/drivers/hwmon/hdaps.c	2006-02-10 17:14:08.000000000 +0000
+@@ -34,20 +34,16 @@
+ #include <linux/timer.h>
+ #include <linux/dmi.h>
++#include <linux/tp_base.h>
+ #include <asm/io.h>
+ 
+-#define HDAPS_LOW_PORT		0x1600	/* first port used by hdaps */
+-#define HDAPS_NR_PORTS		0x30	/* number of ports: 0x1600 - 0x162f */
+-
+-#define HDAPS_PORT_STATE	0x1611	/* device state */
+-#define HDAPS_PORT_YPOS		0x1612	/* y-axis position */
+-#define	HDAPS_PORT_XPOS		0x1614	/* x-axis position */
+-#define HDAPS_PORT_TEMP1	0x1616	/* device temperature, in celcius */
+-#define HDAPS_PORT_YVAR		0x1617	/* y-axis variance (what is this?) */
+-#define HDAPS_PORT_XVAR		0x1619	/* x-axis variance (what is this?) */
+-#define HDAPS_PORT_TEMP2	0x161b	/* device temperature (again?) */
+-#define HDAPS_PORT_UNKNOWN	0x161c	/* what is this? */
+-#define HDAPS_PORT_KMACT	0x161d	/* keyboard or mouse activity */
+-
+-#define STATE_FRESH		0x50	/* accelerometer data is fresh */
++#define HDAPS_IDX_STATE		0x1	/* device state */
++#define HDAPS_IDX_YPOS		0x2	/* y-axis position */
++#define	HDAPS_IDX_XPOS		0x4	/* x-axis position */
++#define HDAPS_IDX_TEMP1		0x6	/* device temperature, in celcius */
++#define HDAPS_IDX_YVAR		0x7	/* y-axis variance (what is this?) */
++#define HDAPS_IDX_XVAR		0x9	/* x-axis variance (what is this?) */
++#define HDAPS_IDX_TEMP2		0xb	/* device temperature (again?) */
++#define HDAPS_IDX_UNKNOWN	0xc	/* what is this? */
++#define HDAPS_IDX_KMACT		0xd	/* keyboard or mouse activity */
+ 
+ #define KEYBD_MASK		0x20	/* set if keyboard activity */
+@@ -56,6 +52,9 @@
+ #define MOUSE_ISSET(n)		(!! (n & MOUSE_MASK))	/* mouse used? */
+ 
+-#define INIT_TIMEOUT_MSECS	4000	/* wait up to 4s for device init ... */
+-#define INIT_WAIT_MSECS		200	/* ... in 200ms increments */
++#define STATE_HAVE_POS          0x01    /* have position data */
++#define STATE_HAVE_POS_VAR      0x02    /* have position and variance data */
++
++#define READ_TIMEOUT_MSECS	100	/* wait up to 0.1s for device read */
++#define RETRY_MSECS		2	/* retry delay */
+ 
+ #define HDAPS_POLL_PERIOD	(HZ/20)	/* poll for input every 1/20s */
+@@ -63,4 +62,7 @@
+ #define HDAPS_INPUT_FLAT	4
+ 
++#define READ_POSITION  0
++#define READ_VARIANCE  1
++
+ static struct timer_list hdaps_timer;
+ static struct platform_device *pdev;
+@@ -68,78 +70,38 @@ static struct input_dev *hdaps_idev;
+ static unsigned int hdaps_invert;
+ static u8 km_activity;
++
+ static int rest_x;
+ static int rest_y;
++static int needs_calibration = 0;
+ 
+-static DECLARE_MUTEX(hdaps_sem);
+-
+-/*
+- * __get_latch - Get the value from a given port.  Callers must hold hdaps_sem.
+- */
+-static inline u8 __get_latch(u16 port)
+-{
+-	return inb(port) & 0xff;
+-}
+-
+-/*
+- * __check_latch - Check a port latch for a given value.  Returns zero if the
+- * port contains the given value.  Callers must hold hdaps_sem.
+- */
+-static inline int __check_latch(u16 port, u8 val)
+-{
+-	if (__get_latch(port) == val)
+-		return 0;
+-	return -EINVAL;
+-}
+ 
+ /*
+  * __wait_latch - Wait up to 100us for a port latch to get a certain value,
+- * returning zero if the value is obtained.  Callers must hold hdaps_sem.
++ * returning zero if the value is obtained. Callers must hold controller lock.
+  */
+-static int __wait_latch(u16 port, u8 val)
++static int __wait_latch(u16 port, u8 val, const char* comment)
+ {
+ 	unsigned int i;
+ 
+-	for (i = 0; i < 20; i++) {
+-		if (!__check_latch(port, val))
++	for (i = 0; i < 200; i++) {
++		if (inb(port)==val)
+ 			return 0;
+ 		udelay(5);
+ 	}
+ 
++	printk(KERN_ERR "hdaps: __wait_latch(0x%x,0x%2x,\"%s\") timed out\n",
++	       (int)port, (int)val, comment);
+ 	return -EIO;
+ }
+ 
+-/*
+- * __device_refresh - request a refresh from the accelerometer.  Does not wait
+- * for refresh to complete.  Callers must hold hdaps_sem.
+- */
+-static void __device_refresh(void)
+-{
+-	udelay(200);
+-	if (inb(0x1604) != STATE_FRESH) {
+-		outb(0x11, 0x1610);
+-		outb(0x01, 0x161f);
+-	}
+-}
+-
+-/*
+- * __device_refresh_sync - request a synchronous refresh from the
+- * accelerometer.  We wait for the refresh to complete.  Returns zero if
+- * successful and nonzero on error.  Callers must hold hdaps_sem.
+- */
+-static int __device_refresh_sync(void)
+-{
+-	__device_refresh();
+-	return __wait_latch(0x1604, STATE_FRESH);
+-}
+ 
+-/*
+- * __device_complete - indicate to the accelerometer that we are done reading
+- * data, and then initiate an async refresh.  Callers must hold hdaps_sem.
++/* hdaps_read_row - read a row of data from the controller.
++ * Also prefetches the next read, to reduce udelay busy-waiting.
++ * Caller must hold controller lock.
+  */
+-static inline void __device_complete(void)
+-{
+-	inb(0x161f);
+-	inb(0x1604);
+-	__device_refresh();
++static int hdaps_read_row(u8* row) {
++	int ret = tp_controller_read_row(0x11, 0x01, row);
++	tp_controller_prefetch_row(0x11, 0x01);
++	return ret;
+ }
+ 
+@@ -149,35 +111,44 @@ static inline void __device_complete(voi
+  * Can sleep.
+  */
+-static int hdaps_readb_one(unsigned int port, u8 *val)
++static int hdaps_readb_one(unsigned int idx, u8 *val)
+ {
++	u8 row[TP_CONTROLLER_ROW_LEN];
+ 	int ret;
+ 
+-	down(&hdaps_sem);
+-
+-	/* do a sync refresh -- we need to be sure that we read fresh data */
+-	ret = __device_refresh_sync();
+-	if (ret)
+-		goto out;
+-
+-	*val = inb(port);
+-	__device_complete();
+-
+-out:
+-	up(&hdaps_sem);
++	tp_controller_lock();
++	ret = hdaps_read_row(row);
++	if (!ret)
++		*val = row[idx];
++	tp_controller_unlock();
+ 	return ret;
+ }
+ 
+-/* __hdaps_read_pair - internal lockless helper for hdaps_read_pair(). */
+-static int __hdaps_read_pair(unsigned int port1, unsigned int port2,
+-			     int *x, int *y)
+-{
+-	/* do a sync refresh -- we need to be sure that we read fresh data */
+-	if (__device_refresh_sync())
+-		return -EIO;
+-
+-	*y = inw(port2);
+-	*x = inw(port1);
+-	km_activity = inb(HDAPS_PORT_KMACT);
+-	__device_complete();
++/* __hdaps_read_pair - read X,Y coordinates of either position or variance
++ * Caller must hold controller lock. 
++ */
++static int __hdaps_read_pair(int which, int *x, int *y)
++{
++	u8 row[TP_CONTROLLER_ROW_LEN];
++	int ret;
++	int x_idx, y_idx, min_state;
++
++	if (which==READ_POSITION) {
++		x_idx = HDAPS_IDX_XPOS;
++		y_idx = HDAPS_IDX_YPOS;
++		min_state = STATE_HAVE_POS;
++	} else { /* so which==READ_VARIANCE */
++		x_idx = HDAPS_IDX_XVAR;
++		y_idx = HDAPS_IDX_YVAR;
++		min_state = STATE_HAVE_POS_VAR;
++	}
++
++	ret = hdaps_read_row(row);
++	if (ret)
++		return ret;
++	if (row[HDAPS_IDX_STATE] < min_state) /* accelerometer not ready */
++		return -EBUSY;
++	*x = row[x_idx] | (((int)row[x_idx+1])<<8);
++	*y = row[y_idx] | (((int)row[y_idx+1])<<8);
++	km_activity = row[HDAPS_IDX_KMACT];
+ 
+ 	/* if hdaps_invert is set, negate the two values */
+@@ -193,15 +164,20 @@ static int __hdaps_read_pair(unsigned in
+  * hdaps_read_pair - reads the values from a pair of ports, placing the values
+  * in the given pointers.  Returns zero on success.  Can sleep.
++ * Retries until timeout, since the accelerometer is often not read.
++ * Does internal locking.
+  */
+-static int hdaps_read_pair(unsigned int port1, unsigned int port2,
+-			   int *val1, int *val2)
++static int hdaps_read_pair(int which, int *x, int *y)
+ {
+-	int ret;
+-
+-	down(&hdaps_sem);
+-	ret = __hdaps_read_pair(port1, port2, val1, val2);
+-	up(&hdaps_sem);
+-
+-	return ret;
++	int total, ret;
++	for (total=READ_TIMEOUT_MSECS; total>0; total-=RETRY_MSECS) {
++		tp_controller_lock();
++		ret = __hdaps_read_pair(which, x, y);
++		tp_controller_unlock();
++
++		if (ret != -EBUSY)
++			return ret;
++		msleep(RETRY_MSECS);
++	}
++	return -EBUSY;
+ }
+ 
+@@ -212,44 +188,43 @@ static int hdaps_read_pair(unsigned int 
+ static int hdaps_device_init(void)
+ {
+-	int total, ret = -ENXIO;
++	int ret = -ENXIO;
++	u8 status;
+ 
+-	down(&hdaps_sem);
++	tp_controller_lock();
+ 
+ 	outb(0x13, 0x1610);
+ 	outb(0x01, 0x161f);
+-	if (__wait_latch(0x161f, 0x00))
++	if (__wait_latch(0x161f, 0x00, "1st")) 
+ 		goto out;
+ 
+-	/*
+-	 * Most ThinkPads return 0x01.
+-	 *
+-	 * Others--namely the R50p, T41p, and T42p--return 0x03.  These laptops
+-	 * have "inverted" axises.
+-	 *
+-	 * The 0x02 value occurs when the chip has been previously initialized.
+-	 */
+-	if (__check_latch(0x1611, 0x03) &&
+-		     __check_latch(0x1611, 0x02) &&
+-		     __check_latch(0x1611, 0x01))
++	status = inb(0x1611);
++	if (status != 0x03 && /* Invertex axes (ThinkPad R50p, T41p, R42p) */
++	    status != 0x02 && /* Chip already initialized */
++	    status != 0x01 && /* Normal axes */
++	    status != 0x00)   /* Seen after suspend-to-disk; not an error */
++	{ 
++		printk(KERN_ERR "hdaps: initial latch check bad (0x%02x).\n",
++		       status);
+ 		goto out;
++	}
+ 
+ 	printk(KERN_DEBUG "hdaps: initial latch check good (0x%02x).\n",
+-	       __get_latch(0x1611));
++	       status);
+ 
+ 	outb(0x17, 0x1610);
+ 	outb(0x81, 0x1611);
+ 	outb(0x01, 0x161f);
+-	if (__wait_latch(0x161f, 0x00))
++	if (__wait_latch(0x161f, 0x00, "2nd"))
+ 		goto out;
+-	if (__wait_latch(0x1611, 0x00))
++	if (__wait_latch(0x1611, 0x00, ""))
+ 		goto out;
+-	if (__wait_latch(0x1612, 0x60))
++	if (__wait_latch(0x1612, 0x60, ""))
+ 		goto out;
+-	if (__wait_latch(0x1613, 0x00))
++	if (__wait_latch(0x1613, 0x00, ""))
+ 		goto out;
+ 	outb(0x14, 0x1610);
+ 	outb(0x01, 0x1611);
+ 	outb(0x01, 0x161f);
+-	if (__wait_latch(0x161f, 0x00))
++	if (__wait_latch(0x161f, 0x00, "3rd"))
+ 		goto out;
+ 	outb(0x10, 0x1610);
+@@ -258,27 +233,17 @@ static int hdaps_device_init(void)
+ 	outb(0x02, 0x1613);
+ 	outb(0x01, 0x161f);
+-	if (__wait_latch(0x161f, 0x00))
+-		goto out;
+-	if (__device_refresh_sync())
+-		goto out;
+-	if (__wait_latch(0x1611, 0x00))
++	if (__wait_latch(0x161f, 0x00, "4th"))
+ 		goto out;
++	tp_controller_invalidate();
++	udelay(200);
+ 
+-	/* we have done our dance, now let's wait for the applause */
+-	for (total = INIT_TIMEOUT_MSECS; total > 0; total -= INIT_WAIT_MSECS) {
+-		int x, y;
+-
+-		/* a read of the device helps push it into action */
+-		__hdaps_read_pair(HDAPS_PORT_XPOS, HDAPS_PORT_YPOS, &x, &y);
+-		if (!__wait_latch(0x1611, 0x02)) {
+-			ret = 0;
+-			break;
+-		}
+-
+-		msleep(INIT_WAIT_MSECS);
+-	}
++	/* Just prefetch instead of reading, to avoid ~1sec delay on load */
++	ret = tp_controller_prefetch_row(0x11, 0x01);
++	goto good;
+ 
+ out:
+-	up(&hdaps_sem);
++	tp_controller_invalidate();
++good:
++	tp_controller_unlock();
+ 	return ret;
+ }
+@@ -314,9 +279,13 @@ static struct platform_driver hdaps_driv
+ 
+ /*
+- * hdaps_calibrate - Set our "resting" values.  Callers must hold hdaps_sem.
++ * hdaps_calibrate - Set our "resting" values.
++ * Does its own locking.
+  */
+ static void hdaps_calibrate(void)
+ {
+-	__hdaps_read_pair(HDAPS_PORT_XPOS, HDAPS_PORT_YPOS, &rest_x, &rest_y);
++	if (hdaps_read_pair(READ_POSITION, &rest_x, &rest_y))
++		needs_calibration = 1; /* failed, defer to mousedev poll */
++	else
++		needs_calibration = 0;
+ }
+ 
+@@ -324,13 +293,24 @@ static void hdaps_mousedev_poll(unsigned
+ {
+ 	int x, y;
++	int ret;
+ 
+ 	/* Cannot sleep.  Try nonblockingly.  If we fail, try again later. */
+-	if (down_trylock(&hdaps_sem)) {
+-		mod_timer(&hdaps_timer,jiffies + HDAPS_POLL_PERIOD);
+-		return;
+-	}
++	if (tp_controller_trylock())
++		goto timer;
+ 
+-	if (__hdaps_read_pair(HDAPS_PORT_XPOS, HDAPS_PORT_YPOS, &x, &y))
++	ret = __hdaps_read_pair(READ_POSITION, &x, &y);
++	if (ret==-EBUSY)
++		goto timer;
++	if (ret) {
++		printk(KERN_ERR 
++		       "hdaps: poll failed, disabling mousedev updates\n");
+ 		goto out;
++	}
++
++	if (needs_calibration) {
++		rest_x = x;
++		rest_y = y;
++		needs_calibration = 0;
++	}
+ 
+ 	input_report_abs(hdaps_idev, ABS_X, x - rest_x);
+@@ -338,8 +318,8 @@ static void hdaps_mousedev_poll(unsigned
+ 	input_sync(hdaps_idev);
+ 
++timer:
+ 	mod_timer(&hdaps_timer, jiffies + HDAPS_POLL_PERIOD);
+-
+ out:
+-	up(&hdaps_sem);
++	tp_controller_unlock();
+ }
+ 
+@@ -352,5 +332,5 @@ static ssize_t hdaps_position_show(struc
+ 	int ret, x, y;
+ 
+-	ret = hdaps_read_pair(HDAPS_PORT_XPOS, HDAPS_PORT_YPOS, &x, &y);
++	ret = hdaps_read_pair(READ_POSITION, &x, &y);
+ 	if (ret)
+ 		return ret;
+@@ -364,5 +344,5 @@ static ssize_t hdaps_variance_show(struc
+ 	int ret, x, y;
+ 
+-	ret = hdaps_read_pair(HDAPS_PORT_XVAR, HDAPS_PORT_YVAR, &x, &y);
++	ret = hdaps_read_pair(READ_VARIANCE, &x, &y);
+ 	if (ret)
+ 		return ret;
+@@ -377,5 +357,5 @@ static ssize_t hdaps_temp1_show(struct d
+ 	int ret;
+ 
+-	ret = hdaps_readb_one(HDAPS_PORT_TEMP1, &temp);
++	ret = hdaps_readb_one(HDAPS_IDX_TEMP1, &temp);
+ 	if (ret < 0)
+ 		return ret;
+@@ -390,5 +370,5 @@ static ssize_t hdaps_temp2_show(struct d
+ 	int ret;
+ 
+-	ret = hdaps_readb_one(HDAPS_PORT_TEMP2, &temp);
++	ret = hdaps_readb_one(HDAPS_IDX_TEMP2, &temp);
+ 	if (ret < 0)
+ 		return ret;
+@@ -421,8 +401,5 @@ static ssize_t hdaps_calibrate_store(str
+ 				     const char *buf, size_t count)
+ {
+-	down(&hdaps_sem);
+ 	hdaps_calibrate();
+-	up(&hdaps_sem);
+-
+ 	return count;
+ }
+@@ -537,12 +514,7 @@ static int __init hdaps_init(void)
+ 	}
+ 
+-	if (!request_region(HDAPS_LOW_PORT, HDAPS_NR_PORTS, "hdaps")) {
+-		ret = -ENXIO;
+-		goto out;
+-	}
+-
+ 	ret = platform_driver_register(&hdaps_driver);
+ 	if (ret)
+-		goto out_region;
++		goto out;
+ 
+ 	pdev = platform_device_register_simple("hdaps", -1, NULL, 0);
+@@ -562,6 +534,6 @@ static int __init hdaps_init(void)
+ 	}
+ 
+-	/* initial calibrate for the input device */
+-	hdaps_calibrate();
++	/* calibration for the input device (deferred to avoid delay) */
++	needs_calibration = 1;
+ 
+ 	/* initialize the input class */
+@@ -591,6 +563,4 @@ out_device:
+ out_driver:
+ 	platform_driver_unregister(&hdaps_driver);
+-out_region:
+-	release_region(HDAPS_LOW_PORT, HDAPS_NR_PORTS);
+ out:
+ 	printk(KERN_WARNING "hdaps: driver init failed (ret=%d)!\n", ret);
+@@ -605,5 +575,4 @@ static void __exit hdaps_exit(void)
+ 	platform_device_unregister(pdev);
+ 	platform_driver_unregister(&hdaps_driver);
+-	release_region(HDAPS_LOW_PORT, HDAPS_NR_PORTS);
+ 
+ 	printk(KERN_INFO "hdaps: driver unloaded.\n");

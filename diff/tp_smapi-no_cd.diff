@@ -1,0 +1,117 @@
+--- orig/tp_smapi.c	2006-01-07 20:39:28.000000000 +0200
++++ no_cd_speed/tp_smapi.c	2006-01-07 21:05:56.000000000 +0200
+@@ -73,9 +73,6 @@
+ 
+ #define DPRINTK(fmt, args...) { if (tp_debug) printk(TP_DEBUG fmt, ## args); }
+ 
+-/* provide smapi/cd_speed? redundant and dangerous - see README */
+-/* #define PROVIDE_CD_SPEED  */
+-
+ 
+ /*** SMAPI interface ***/
+ 
+@@ -545,52 +542,6 @@
+ 	return 1;
+ }
+ 
+-#ifdef PROVIDE_CD_SPEED
+-
+-static int get_cd_speed(int *speed) {
+-	const char* msg;
+-	u32 bx, dx, di;
+-	int ret = smapi_read(SMAPI_GET_CDROM_STATUS, 0, 0, 0, 
+-	                     &bx, NULL, &dx, &di, NULL, &msg);
+-	if (ret) {
+-		printk(TP_NOTICE "cannot get cd speed: %s\n", msg);
+-		return ret;
+-	}
+-	if (dx==0x78 && di==0x1e) {
+-		*speed = 2;
+-	} else if (dx==0x0f && di==0x00) {
+-		*speed = 0;
+-	} else {
+-		*speed = 1;
+-	}
+-	/* what does bx&80 mean? */
+-	return 0;
+-}
+-
+-static int set_cd_speed(int speed) {
+-	const char* msg;
+-	int ret, dummy;
+-	short int cx, di;
+-	ret = get_cd_speed(&dummy); /* verify read before writing */
+-	if (ret)
+-		return ret;
+-	if (speed==0) {
+-		cx=0x0f; di=0x00;
+-	} else if (speed==1) {
+-		cx=0x1e; di=0x04;
+-	} else {
+-		cx=0x78; di=0x1e;
+-	}
+-	ret = smapi_write(SMAPI_SET_CDROM_STATUS, cx, di, 0, &msg);
+-	if (ret)
+-		printk(TP_NOTICE "cannot set cd speed to %d: %s\n", speed, msg);
+-	else
+-		printk(TP_INFO "cd speed set to level %d\n",
+-		       speed);
+-	return ret;
+-}
+-
+-#endif /* PROVIDE_CD_SPEED */
+ 
+ /*** proc file read/write routines ***/
+ 
+@@ -986,36 +937,6 @@
+ 	return p-buf;
+ }
+ 
+-#ifdef PROVIDE_CD_SPEED
+-
+-static int cd_speed_show(struct device *dev, 
+-                         struct device_attribute *attr, char *buf)
+-{
+-	int speed;
+-	int ret = get_cd_speed(&speed);
+-	if (ret)
+-		return ret;
+-	return sprintf(buf, "%d\n", speed);
+-}
+-
+-static int cd_speed_store(struct device *dev, 
+-                          struct device_attribute *attr,
+-                          const char *buf, size_t count)
+-{
+-	int ret;
+-	int speed;
+-	if (sscanf(buf, "%d", &speed)<1 || speed<0 || speed>2) {
+-		printk(TP_ERR "cd_speed: must be between 0 and 2\n");
+-		return -EINVAL;
+-	}
+-	ret = set_cd_speed(speed);
+-	if (ret)
+-		return ret;
+-	return count;
+-}
+-
+-#endif /* PROVIDE_CD_SPEED */
+-
+
+ /*********************************************************************
+  * Driver model and power management
+@@ -1084,14 +1005,8 @@
+ /*** Sysfs device model ***/
+ 
+ /* Attributes in /sys/devices/platform/smapi/ */
+-#ifdef PROVIDE_CD_SPEED
+-static DEVICE_ATTR(cd_speed, 0644, cd_speed_show, cd_speed_store);
+-#endif
+ static DEVICE_ATTR(ac_connected, 0644, ac_connected_show, NULL);
+ static struct attribute *tp_root_attributes[] = {
+-#ifdef PROVIDE_CD_SPEED
+-	&dev_attr_cd_speed.attr,
+-#endif
+ 	&dev_attr_ac_connected.attr,
+ 	NULL
+ };
