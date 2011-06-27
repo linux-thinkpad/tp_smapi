@@ -88,7 +88,11 @@ static u64 prefetch_jiffies;                      /* time of prefetch, or: */
 #define TPC_PREFETCH_JUNK   (INITIAL_JIFFIES+1)   /*   Ignore prefetch */
 
 /* Locking: */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,37)
 static DECLARE_MUTEX(thinkpad_ec_mutex);
+#else
+static DEFINE_SEMAPHORE(thinkpad_ec_mutex);
+#endif
 
 /* Kludge in case the ACPI DSDT reserves the ports we need. */
 static int force_io;    /* Willing to do IO to ports we couldn't reserve? */

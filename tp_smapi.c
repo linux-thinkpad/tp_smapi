@@ -109,7 +109,11 @@ static struct { u8 rc; char *msg; int ret; } smapi_retcode[] =
 #define SMAPI_PORT2 0x4F           /* fixed port, meaning unclear */
 static unsigned short smapi_port;  /* APM control port, normally 0xB2 */
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,37)
 static DECLARE_MUTEX(smapi_mutex);
+#else
+static DEFINE_SEMAPHORE(smapi_mutex);
+#endif
 
 /**
  * find_smapi_port - read SMAPI port from NVRAM
