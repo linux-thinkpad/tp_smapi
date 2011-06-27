@@ -34,7 +34,7 @@
 #include <linux/dmi.h>
 #include <linux/ioport.h>
 #include <linux/delay.h>
-#include <linux/thinkpad_ec.h>
+#include "thinkpad_ec.h"
 #include <linux/jiffies.h>
 #include <asm/io.h>
 

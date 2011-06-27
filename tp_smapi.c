@@ -42,7 +42,7 @@
 #include <linux/mc146818rtc.h>	/* CMOS defines */
 #include <linux/delay.h>
 #include <linux/version.h>
-#include <linux/thinkpad_ec.h>
+#include "thinkpad_ec.h"
 #include <linux/platform_device.h>
 #include <asm/uaccess.h>
 #include <asm/io.h>

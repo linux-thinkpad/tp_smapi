@@ -34,7 +34,7 @@
 #include <linux/timer.h>
 #include <linux/dmi.h>
 #include <linux/jiffies.h>
-#include <linux/thinkpad_ec.h>
+#include "thinkpad_ec.h"
 #include <linux/pci_ids.h>
 #include <linux/version.h>
 
