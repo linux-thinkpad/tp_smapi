@@ -142,7 +142,7 @@ set-version:
 
 TGZ=../tp_smapi-$(VER).tgz
 create-tgz:
-	git-archive  --format=tar --prefix=tp_smapi-$(VER)/ HEAD | gzip -c > $(TGZ)
+	git archive  --format=tar --prefix=tp_smapi-$(VER)/ HEAD | gzip -c > $(TGZ)
 	tar tzvf $(TGZ)
 	echo "Ready: $(TGZ)"
 
