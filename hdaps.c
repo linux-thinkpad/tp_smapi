@@ -714,9 +714,9 @@ static struct attribute_group hdaps_attribute_group = {
 /* hdaps_dmi_match_invert - found an inverted match. */
 static int __init hdaps_dmi_match_invert(const struct dmi_system_id *id)
 {
-	int orient = (int) id->driver_data;
+	unsigned int orient = (kernel_ulong_t) id->driver_data;
 	hdaps_invert = orient;
-	printk(KERN_INFO "hdaps: %s detected, setting orientation %d\n",
+	printk(KERN_INFO "hdaps: %s detected, setting orientation %u\n",
 	       id->ident, orient);
 	return 1; /* stop enumeration */
 }
