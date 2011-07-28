@@ -779,7 +779,7 @@ static ssize_t store_battery_start_charge_thresh(struct device *dev,
 
 	down(&smapi_mutex);
 	ret = get_thresh(bat, THRESH_STOP, &other_thresh);
-	if (ret != -EOPNOTSUPP) {
+	if (ret != -EOPNOTSUPP && ret != -ENXIO) {
 		if (ret) /* other threshold is set? */
 			goto out;
 		ret = get_real_thresh(bat, THRESH_START, NULL);
@@ -821,7 +821,7 @@ static ssize_t store_battery_stop_charge_thresh(struct device *dev,
 
 	down(&smapi_mutex);
 	ret = get_thresh(bat, THRESH_START, &other_thresh);
-	if (ret != -EOPNOTSUPP) { /* other threshold exists? */
+	if (ret != -EOPNOTSUPP && ret != -ENXIO) { /* other threshold exists? */
 		if (ret)
 			goto out;
 		/* this threshold exists? */
