@@ -88,7 +88,7 @@ MODULE_PARM_DESC(debug, "Debug level (0=off, 1=on)");
 static struct { u8 rc; char *msg; int ret; } smapi_retcode[] =
 {
 	{0x00, "OK", 0},
-	{0x53, "SMAPI fuction is not available", -ENXIO},
+	{0x53, "SMAPI function is not available", -ENXIO},
 	{0x81, "Invalid parameter", -EINVAL},
 	{0x86, "Function is not supported by SMAPI BIOS", -EOPNOTSUPP},
 	{0x90, "System error", -EIO},
