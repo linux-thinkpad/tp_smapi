@@ -460,6 +460,7 @@ static int __init check_dmi_for_ec(void)
 		TP_DMI_MATCH("IBM", "ThinkPad A30"),
 		TP_DMI_MATCH("IBM", "ThinkPad T23"),
 		TP_DMI_MATCH("IBM", "ThinkPad X24"),
+		TP_DMI_MATCH("LENOVO", "ThinkPad"),
 		{ .ident = NULL }
 	};
 	return dmi_find_substring(DMI_DEV_TYPE_OEM_STRING,
