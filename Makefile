@@ -27,17 +27,6 @@ endif
 
 DEBUG := 0
 
-ifneq ($(shell [ -f $(KBUILD)/include/linux/aio_abi.h ] && echo 1),1)
-$(warning Building tp_smapi requires Linux kernel 2.6.19 or newer, and matching kernel headers.)
-$(warning You may need to override the following Make variables:)
-$(warning .   KVER=$(KVER))
-$(warning .   KBUILD=$(KBUILD))
-$(warning .   MOD_DIR=$(MOD_DIR))
-$(warning For "make patch", you may also need the full kernel sources, and may need to override:)
-$(warning .   KSRC=$(KSRC))
-$(error Missing kernel headers)
-endif
-
 .PHONY: default clean modules load unload install patch check_hdaps mk-hdaps.diff
 export TP_MODULES
 
