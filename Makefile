@@ -73,7 +73,7 @@ install: modules
 	rm -f $(MOD_DIR)/drivers/firmware/{thinkpad_ec,tp_smapi,tp_base}.ko
 	rm -f $(MOD_DIR)/extra/{thinkpad_ec,tp_smapi,tp_base}.ko
 ifeq ($(HDAPS),1)
-	rm -f $(MOD_DIR)/drivers/hwmon/hdaps.ko
+	rm -f $(MOD_DIR)/drivers/platform/x86/hdaps.ko
 	rm -f $(MOD_DIR)/extra/hdaps.ko
 endif
 	$(MAKE) -C $(KBUILD) M=$(PWD) O=$(KBUILD) modules_install
@@ -98,9 +98,9 @@ patch: $(KSRC)
 	cd $$TMPDIR &&\
 	mkdir -p $(ORG)/$(TP_DIR) &&\
 	mkdir -p $(ORG)/$(IDIR) &&\
-	mkdir -p $(ORG)/drivers/hwmon &&\
+	mkdir -p $(ORG)/drivers/platform/x86 &&\
 	cp $(KSRC)/$(TP_DIR)/{Kconfig,Makefile} $(ORG)/$(TP_DIR) &&\
-	cp $(KSRC)/drivers/hwmon/{Kconfig,hdaps.c} $(ORG)/drivers/hwmon/ &&\
+	cp $(KSRC)/drivers/platform/x86/{Kconfig,hdaps.c} $(ORG)/drivers/platform/x86/ &&\
 	cp -r $(ORG) $(NEW) &&\
 	\
 	if [ "$(BASE_IN_PATCH)" == 1 ]; then \
@@ -111,8 +111,8 @@ patch: $(KSRC)
 	; fi &&\
 	\
 	if [ "$(HDAPS_IN_PATCH)" == 1 ]; then \
-		cp $(PWD)/hdaps.c $(NEW)/drivers/hwmon/ &&\
-		perl -i -0777 -pe 's/(config SENSORS_HDAPS\n\ttristate [^\n]+\n\tdepends [^\n]+\n)/$$1\tselect THINKPAD_EC\n/' $(NEW)/drivers/hwmon/Kconfig  \
+		cp $(PWD)/hdaps.c $(NEW)/drivers/platform/x86/ &&\
+		perl -i -0777 -pe 's/(config SENSORS_HDAPS\n\ttristate [^\n]+\n\tdepends [^\n]+\n)/$$1\tselect THINKPAD_EC\n/' $(NEW)/drivers/platform/x86/Kconfig  \
 	; fi &&\
 	\
 	if [ "$(SMAPI_IN_PATCH)" == 1 ]; then \
