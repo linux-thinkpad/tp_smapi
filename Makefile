@@ -22,7 +22,7 @@ endif
 ifeq ($(FORCE_IO),1)
 THINKPAD_EC_PARAM := force_io=1
 else
-THINKPAD_EC_PARAM := 
+THINKPAD_EC_PARAM :=
 endif
 
 DEBUG := 0
