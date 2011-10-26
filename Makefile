@@ -8,7 +8,7 @@ KBUILD      := $(KBASE)/build
 MOD_DIR     := $(KBASE)/kernel
 PWD         := $(shell pwd)
 IDIR        := include/linux
-TP_DIR      := drivers/misc
+TP_DIR      := drivers/platform/x86
 TP_MODULES  := thinkpad_ec.o tp_smapi.o
 SHELL       := /bin/bash
 
@@ -105,8 +105,8 @@ patch: $(KSRC)
 	\
 	if [ "$(BASE_IN_PATCH)" == 1 ]; then \
 		cp $(PWD)/thinkpad_ec.c $(NEW)/$(TP_DIR)/thinkpad_ec.c &&\
-		cp $(PWD)/thinkpad_ec.h $(NEW)/$(IDIR)/thinkpad_ec.h &&\
-		perl -i -pe 'print `cat $(PWD)/diff/Kconfig-thinkpad_ec.add` if m/^(endmenu|endif # MISC_DEVICES)$$/' $(NEW)/$(TP_DIR)/Kconfig &&\
+		cp $(PWD)/thinkpad_ec.h $(NEW)/$(TP_DIR)/thinkpad_ec.h &&\
+		perl -i -pe 'print `cat $(PWD)/diff/Kconfig-thinkpad_ec.add` if m/^(endmenu|endif # X86_PLATFORM_DEVICES)$$/' $(NEW)/$(TP_DIR)/Kconfig &&\
 		sed -i -e '$$aobj-$$(CONFIG_THINKPAD_EC)       += thinkpad_ec.o' $(NEW)/$(TP_DIR)/Makefile \
 	; fi &&\
 	\
@@ -117,7 +117,7 @@ patch: $(KSRC)
 	\
 	if [ "$(SMAPI_IN_PATCH)" == 1 ]; then \
 		sed -i -e '$$aobj-$$(CONFIG_TP_SMAPI)          += tp_smapi.o' $(NEW)/$(TP_DIR)/Makefile &&\
-		perl -i -pe 'print `cat $(PWD)/diff/Kconfig-tp_smapi.add` if m/^(endmenu|endif # MISC_DEVICES)$$/' $(NEW)/$(TP_DIR)/Kconfig &&\
+		perl -i -pe 'print `cat $(PWD)/diff/Kconfig-tp_smapi.add` if m/^(endmenu|endif # X86_PLATFORM_DEVICES)$$/' $(NEW)/$(TP_DIR)/Kconfig &&\
 		cp $(PWD)/tp_smapi.c $(NEW)/$(TP_DIR)/tp_smapi.c &&\
 		mkdir -p $(NEW)/Documentation &&\
 		perl -0777 -pe 's/\n(Installation\n---+|Conflict with HDAPS\n---+|Files in this package\n---+|Setting and getting CD-ROM speed:\n).*?\n(?=[^\n]*\n-----)/\n/gs' $(PWD)/README > $(NEW)/Documentation/tp_smapi.txt \
