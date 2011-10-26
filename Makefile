@@ -8,7 +8,7 @@ KBUILD      := $(KBASE)/build
 MOD_DIR     := $(KBASE)/kernel
 PWD         := $(shell pwd)
 IDIR        := include/linux
-TP_DIR      := drivers/misc
+TP_DIR      := drivers/platform/x86
 TP_MODULES  := thinkpad_ec.o tp_smapi.o
 SHELL       := /bin/bash
 
@@ -22,7 +22,7 @@ endif
 ifeq ($(FORCE_IO),1)
 THINKPAD_EC_PARAM := force_io=1
 else
-THINKPAD_EC_PARAM := 
+THINKPAD_EC_PARAM :=
 endif
 
 DEBUG := 0
@@ -73,7 +73,7 @@ install: modules
 	rm -f $(MOD_DIR)/drivers/firmware/{thinkpad_ec,tp_smapi,tp_base}.ko
 	rm -f $(MOD_DIR)/extra/{thinkpad_ec,tp_smapi,tp_base}.ko
 ifeq ($(HDAPS),1)
-	rm -f $(MOD_DIR)/drivers/hwmon/hdaps.ko
+	rm -f $(MOD_DIR)/drivers/platform/x86/hdaps.ko
 	rm -f $(MOD_DIR)/extra/hdaps.ko
 endif
 	$(MAKE) -C $(KBUILD) M=$(PWD) O=$(KBUILD) modules_install
@@ -98,26 +98,26 @@ patch: $(KSRC)
 	cd $$TMPDIR &&\
 	mkdir -p $(ORG)/$(TP_DIR) &&\
 	mkdir -p $(ORG)/$(IDIR) &&\
-	mkdir -p $(ORG)/drivers/hwmon &&\
+	mkdir -p $(ORG)/drivers/platform/x86 &&\
 	cp $(KSRC)/$(TP_DIR)/{Kconfig,Makefile} $(ORG)/$(TP_DIR) &&\
-	cp $(KSRC)/drivers/hwmon/{Kconfig,hdaps.c} $(ORG)/drivers/hwmon/ &&\
+	cp $(KSRC)/drivers/platform/x86/{Kconfig,hdaps.c} $(ORG)/drivers/platform/x86/ &&\
 	cp -r $(ORG) $(NEW) &&\
 	\
 	if [ "$(BASE_IN_PATCH)" == 1 ]; then \
 		cp $(PWD)/thinkpad_ec.c $(NEW)/$(TP_DIR)/thinkpad_ec.c &&\
-		cp $(PWD)/thinkpad_ec.h $(NEW)/$(IDIR)/thinkpad_ec.h &&\
-		perl -i -pe 'print `cat $(PWD)/diff/Kconfig-thinkpad_ec.add` if m/^(endmenu|endif # MISC_DEVICES)$$/' $(NEW)/$(TP_DIR)/Kconfig &&\
+		cp $(PWD)/thinkpad_ec.h $(NEW)/$(TP_DIR)/thinkpad_ec.h &&\
+		perl -i -pe 'print `cat $(PWD)/diff/Kconfig-thinkpad_ec.add` if m/^(endmenu|endif # X86_PLATFORM_DEVICES)$$/' $(NEW)/$(TP_DIR)/Kconfig &&\
 		sed -i -e '$$aobj-$$(CONFIG_THINKPAD_EC)       += thinkpad_ec.o' $(NEW)/$(TP_DIR)/Makefile \
 	; fi &&\
 	\
 	if [ "$(HDAPS_IN_PATCH)" == 1 ]; then \
-		cp $(PWD)/hdaps.c $(NEW)/drivers/hwmon/ &&\
-		perl -i -0777 -pe 's/(config SENSORS_HDAPS\n\ttristate [^\n]+\n\tdepends [^\n]+\n)/$$1\tselect THINKPAD_EC\n/' $(NEW)/drivers/hwmon/Kconfig  \
+		cp $(PWD)/hdaps.c $(NEW)/drivers/platform/x86/ &&\
+		perl -i -0777 -pe 's/(config SENSORS_HDAPS\n\ttristate [^\n]+\n\tdepends [^\n]+\n)/$$1\tselect THINKPAD_EC\n/' $(NEW)/drivers/platform/x86/Kconfig  \
 	; fi &&\
 	\
 	if [ "$(SMAPI_IN_PATCH)" == 1 ]; then \
 		sed -i -e '$$aobj-$$(CONFIG_TP_SMAPI)          += tp_smapi.o' $(NEW)/$(TP_DIR)/Makefile &&\
-		perl -i -pe 'print `cat $(PWD)/diff/Kconfig-tp_smapi.add` if m/^(endmenu|endif # MISC_DEVICES)$$/' $(NEW)/$(TP_DIR)/Kconfig &&\
+		perl -i -pe 'print `cat $(PWD)/diff/Kconfig-tp_smapi.add` if m/^(endmenu|endif # X86_PLATFORM_DEVICES)$$/' $(NEW)/$(TP_DIR)/Kconfig &&\
 		cp $(PWD)/tp_smapi.c $(NEW)/$(TP_DIR)/tp_smapi.c &&\
 		mkdir -p $(NEW)/Documentation &&\
 		perl -0777 -pe 's/\n(Installation\n---+|Conflict with HDAPS\n---+|Files in this package\n---+|Setting and getting CD-ROM speed:\n).*?\n(?=[^\n]*\n-----)/\n/gs' $(PWD)/README > $(NEW)/Documentation/tp_smapi.txt \
