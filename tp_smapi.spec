@@ -5,7 +5,7 @@ Name:           %{module}
 Version:        %{version}
 Release:        1%{?dist}
 Summary:        IBM ThinkPad hardware functions driver - DKMS version
-
+Group:          Kernel/Drivers
 License:        GPLv2
 Source0:        %{module}-%{version}.tgz
 
