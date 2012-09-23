@@ -27,7 +27,8 @@ endif
 
 DEBUG := 0
 
-.PHONY: default clean modules load unload install patch check_hdaps mk-hdaps.diff
+.PHONY: default clean modules load unload install patch check_hdaps mk-hdaps.diff \
+	check-ver set-version create-tgz create-rpm
 export TP_MODULES
 
 #####################################################################
@@ -136,15 +137,28 @@ patch: $(KSRC)
 #####################################################################
 # Tools for preparing a release. Ignore these.
 
-set-version:
+TGZ=../tp_smapi-$(VER).tgz
+
+check-ver:
+	@if [ -z "$(VER)"]; then \
+		echo "VER is unset"; \
+		echo "run: $(MAKE) $(MAKECMDGOALS) VER=<release version>"; \
+		exit 1 ;\
+	 fi
+
+set-version: check-ver
 	perl -i -pe 's/^(tp_smapi version ).*/$${1}$(VER)/' README
 	perl -i -pe 's/^(#define TP_VERSION ").*/$${1}$(VER)"/' thinkpad_ec.c tp_smapi.c
 
-TGZ=../tp_smapi-$(VER).tgz
-create-tgz:
+create-tgz: check-ver
 	git archive  --format=tar --prefix=tp_smapi-$(VER)/ HEAD | gzip -c > $(TGZ)
 	tar tzvf $(TGZ)
 	echo "Ready: $(TGZ)"
+
+create-rpm: create-tgz
+	mkdir -p rpmbuild
+	rpmbuild -tb --define "_topdir $$PWD/rpmbuild" $(TGZ)
+
 
 else
 #####################################################################
