@@ -77,7 +77,7 @@ ifeq ($(HDAPS),1)
 	rm -f $(MOD_DIR)/extra/hdaps.ko
 endif
 	$(MAKE) -C $(KBUILD) M=$(PWD) O=$(KBUILD) modules_install
-	depmod -a
+	depmod $(KVER)
 
 
 #####################################################################
