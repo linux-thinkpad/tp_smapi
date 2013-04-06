@@ -1,11 +1,11 @@
 ifndef TP_MODULES
 # This part runs as a normal, top-level Makefile:
 X:=$(shell false)
-KVER        := $(shell uname -r)
-KBASE       := /lib/modules/$(KVER)
-KSRC        := $(KBASE)/source
-KBUILD      := $(KBASE)/build
-MOD_DIR     := $(KBASE)/kernel
+KVER        ?= $(shell uname -r)
+KBASE       ?= /lib/modules/$(KVER)
+KSRC        ?= $(KBASE)/source
+KBUILD      ?= $(KBASE)/build
+MOD_DIR     ?= $(KBASE)/kernel
 PWD         := $(shell pwd)
 IDIR        := include/linux
 TP_DIR      := drivers/platform/x86
