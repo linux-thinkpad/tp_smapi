@@ -88,7 +88,7 @@ endif
 #####################################################################
 # Generate a stand-alone kernel patch
 
-TP_VER := ${shell sed -ne 's/^\#define TP_VERSION \"\(.*\)\"/\1/gp' tp_smapi.c}
+TP_VER := 0.41
 ORG    := a
 NEW    := b
 PATCH  := tp_smapi-$(TP_VER)-for-$(KVER).patch
@@ -144,6 +144,7 @@ patch: $(KSRC)
 set-version:
 	perl -i -pe 's/^(tp_smapi version ).*/$${1}$(VER)/' README
 	perl -i -pe 's/^(#define TP_VERSION ").*/$${1}$(VER)"/' thinkpad_ec.c tp_smapi.c
+	perl -i -pe 's/^(TP_VER := ).*/$${1}$(VER)/' Makefile
 
 TGZ=../tp_smapi-$(VER).tgz
 create-tgz:
