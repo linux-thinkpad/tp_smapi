@@ -25,6 +25,11 @@ else
 THINKPAD_EC_PARAM :=
 endif
 
+ifneq ($(KERNELRELEASE),)
+	obj-m  := $(TP_MODULES)
+else
+endif
+
 DEBUG := 0
 
 .PHONY: default clean modules load unload install patch check_hdaps mk-hdaps.diff
