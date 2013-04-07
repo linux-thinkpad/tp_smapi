@@ -145,6 +145,7 @@ set-version:
 	perl -i -pe 's/^(tp_smapi version ).*/$${1}$(VER)/' README
 	perl -i -pe 's/^(#define TP_VERSION ").*/$${1}$(VER)"/' thinkpad_ec.c tp_smapi.c
 	perl -i -pe 's/^(TP_VER := ).*/$${1}$(VER)/' Makefile
+	perl -i -pe 's/^(PACKAGE_VERSION=").*/$${1}$(VER)"/' dkms.conf
 
 TGZ=../tp_smapi-$(VER).tgz
 create-tgz:
