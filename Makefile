@@ -1,11 +1,11 @@
 ifndef TP_MODULES
 # This part runs as a normal, top-level Makefile:
 X:=$(shell false)
-KVER        := $(shell uname -r)
-KBASE       := /lib/modules/$(KVER)
-KSRC        := $(KBASE)/source
-KBUILD      := $(KBASE)/build
-MOD_DIR     := $(KBASE)/kernel
+KVER        ?= $(shell uname -r)
+KBASE       ?= /lib/modules/$(KVER)
+KSRC        ?= $(KBASE)/source
+KBUILD      ?= $(KBASE)/build
+MOD_DIR     ?= $(KBASE)/kernel
 PWD         := $(shell pwd)
 IDIR        := include/linux
 TP_DIR      := drivers/platform/x86
@@ -23,6 +23,11 @@ ifeq ($(FORCE_IO),1)
 THINKPAD_EC_PARAM := force_io=1
 else
 THINKPAD_EC_PARAM :=
+endif
+
+ifneq ($(KERNELRELEASE),)
+	obj-m  := $(TP_MODULES)
+else
 endif
 
 DEBUG := 0
@@ -78,13 +83,13 @@ ifeq ($(HDAPS),1)
 	rm -f $(MOD_DIR)/extra/hdaps.ko
 endif
 	$(MAKE) -C $(KBUILD) M=$(PWD) O=$(KBUILD) modules_install
-	depmod -a
+	depmod $(KVER)
 
 
 #####################################################################
 # Generate a stand-alone kernel patch
 
-TP_VER := ${shell sed -ne 's/^\#define TP_VERSION \"\(.*\)\"/\1/gp' tp_smapi.c}
+TP_VER := 0.41
 ORG    := a
 NEW    := b
 PATCH  := tp_smapi-$(TP_VER)-for-$(KVER).patch
@@ -149,6 +154,8 @@ check-ver:
 set-version: check-ver
 	perl -i -pe 's/^(tp_smapi version ).*/$${1}$(VER)/' README
 	perl -i -pe 's/^(#define TP_VERSION ").*/$${1}$(VER)"/' thinkpad_ec.c tp_smapi.c
+	perl -i -pe 's/^(TP_VER := ).*/$${1}$(VER)/' Makefile
+	perl -i -pe 's/^(PACKAGE_VERSION=").*/$${1}$(VER)"/' dkms.conf
 
 create-tgz: check-ver
 	git archive  --format=tar --prefix=tp_smapi-$(VER)/ HEAD | gzip -c > $(TGZ)

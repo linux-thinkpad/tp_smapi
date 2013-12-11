@@ -14,4 +14,4 @@ Save and and restore inhibit_charge_minutes across suspend-to-disk, as done
 for charge thresholds (requires the above time calculations too).
 
 Use the new Linux battery model introduced in kernel 2.6.23 (see the kernel's
-Documentation/power_supply_class.txt).
+Documentation/power/power_supply_class.txt).
