@@ -145,7 +145,7 @@ patch: $(KSRC)
 TGZ=../tp_smapi-$(VER).tgz
 
 check-ver:
-	@if [ -z "$(VER)"]; then \
+	@if [ -z "$(VER)" ]; then \
 		echo "VER is unset"; \
 		echo "run: $(MAKE) $(MAKECMDGOALS) VER=<release version>"; \
 		exit 1 ;\
