@@ -1,5 +1,5 @@
 %define module tp_smapi
-%define version 0.41
+%define version 0.42
 
 Name:           %{module}
 Version:        %{version}

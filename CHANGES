@@ -1,5 +1,13 @@
 Change history for the tp_smapi package:
 
+0.42 2016-04-23
+---------------------
+- fixes for newer kernels
+- kbuild support
+- dkms support
+- quirks update
+- RPM support
+
 0.41 2011-07-29
 ---------------------
 - new maintainer
