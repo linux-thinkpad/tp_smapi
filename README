@@ -320,8 +320,6 @@ hdaps.c
   thinkpad_ec and several other improvements.
 diff/*  (excluding above)
   Used by "make patch" to create a clean stand-alone patch.
-include/
-  Contains a symlink to make gcc happy in kernel builds.
 
 
 More about SMAPI

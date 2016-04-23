@@ -3,7 +3,7 @@ Change history for the tp_smapi package:
 0.41 2011-07-29
 ---------------------
 - new maintainer
-- fixes for neuwer kernels
+- fixes for newer kernels
 - fixes for newer ThinkPads (esp. SandyBridge ones)
 
 0.40 2008-12-16
