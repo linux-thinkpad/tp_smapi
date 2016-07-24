@@ -180,9 +180,17 @@ Works (at least partially) on the following ThinkPad model:
 * A30
 * G41
 * R40, R50p, R51, R52
-* T23, T40, T40p, T41, T41p, T42, T42p, T43, T43p, T60
-* X24, X31, X32, X40, X41, X60
+* T23, T40, T40p, T41, T41p, T42, T42p, T43, T43p, T60, T61, T400, T410, T420 (partially)
+* X24, X31, X32, X40, X41, X60, X61, X200, X201, X220 (partially)
 * Z60t, Z61m
+
+Does not work on:
+* X230 and newer
+* T430 and newer
+* Any ThinkPad Edge
+* Any ThinkPad Yoga
+* Any ThinkPad L series
+* Any ThinkPad P series
 
 Not all functions are available on all models; for detailed status, see:
   http://thinkwiki.org/wiki/tp_smapi
