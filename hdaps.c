@@ -735,7 +735,7 @@ static int __init hdaps_dmi_match_invert(const struct dmi_system_id *id)
    Note that HDAPS_DMI_MATCH_NORMAL("ThinkPad T42") would match
    "ThinkPad T42p", and enumeration stops after first match,
    so the order of the entries matters. */
-struct dmi_system_id __initdata hdaps_whitelist[] = {
+struct dmi_system_id __initconst hdaps_whitelist[] = {
 	HDAPS_DMI_MATCH_INVERT("IBM", "ThinkPad R50p", HDAPS_ORIENT_INVERT_XY),
 	HDAPS_DMI_MATCH_INVERT("IBM", "ThinkPad R60", HDAPS_ORIENT_INVERT_XY),
 	HDAPS_DMI_MATCH_INVERT("IBM", "ThinkPad T41p", HDAPS_ORIENT_INVERT_XY),
