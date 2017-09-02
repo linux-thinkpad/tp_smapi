@@ -62,7 +62,7 @@ static const struct thinkpad_ec_row ec_accel_args =
 
 #define HDAPS_INPUT_FUZZ	4	/* input event threshold */
 #define HDAPS_INPUT_FLAT	4
-#define KMACT_REMEMBER_PERIOD   (HZ/10) /* keyboard/mouse persistance */
+#define KMACT_REMEMBER_PERIOD   (HZ/10) /* keyboard/mouse persistence */
 
 /* Input IDs */
 #define HDAPS_INPUT_VENDOR	PCI_VENDOR_ID_IBM
