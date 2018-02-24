@@ -89,7 +89,7 @@ endif
 #####################################################################
 # Generate a stand-alone kernel patch
 
-TP_VER := 0.42
+TP_VER := 0.43
 ORG    := a
 NEW    := b
 PATCH  := tp_smapi-$(TP_VER)-for-$(KVER).patch
