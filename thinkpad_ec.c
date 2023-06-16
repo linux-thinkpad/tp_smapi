@@ -90,8 +90,10 @@ static u64 prefetch_jiffies;                      /* time of prefetch, or: */
 /* Locking: */
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,37)
 static DECLARE_MUTEX(thinkpad_ec_mutex);
-#else
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(6,4,0)
 static DEFINE_SEMAPHORE(thinkpad_ec_mutex);
+#else
+static DEFINE_SEMAPHORE(thinkpad_ec_mutex, 1);
 #endif
 
 /* Kludge in case the ACPI DSDT reserves the ports we need. */
