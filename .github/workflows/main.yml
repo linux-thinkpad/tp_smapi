@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - master
+    tags:
+      - '**'
+  pull_request:
+
+concurrency:
+  group: ${{ github.ref_name }}-${{ github.workflow }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        linux:
+          - v6.1
+          - master
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          path: tp_smapi
+      - uses: actions/checkout@v3
+        with:
+          repository: torvalds/linux
+          ref: ${{ matrix.linux }}
+          path: linux
+      - run: sudo apt-get install -y libelf-dev ccache
+      - uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: ${{ matrix.linux }}
+      - run: make -C linux defconfig
+      - name: Run make -C linux
+        run: |
+          export PATH="/usr/lib/ccache:$PATH"
+          make -C linux -j $(nproc)
+      - run: make -C tp_smapi modules KBUILD=../linux HDAPS=1
