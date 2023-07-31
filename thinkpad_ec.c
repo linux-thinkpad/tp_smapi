@@ -45,7 +45,7 @@
 	#include <linux/semaphore.h>
 #endif
 
-#define TP_VERSION "0.43"
+#define TP_VERSION "0.44"
 
 MODULE_AUTHOR("Shem Multinymous");
 MODULE_DESCRIPTION("ThinkPad embedded controller hardware access");
