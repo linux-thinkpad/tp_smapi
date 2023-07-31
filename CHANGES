@@ -1,5 +1,13 @@
 Change history for the tp_smapi package:
 
+0.44 2023-07-31
+---------------------
+- Support for 6.4 kernels
+
+0.43 2018-02-24
+---------------------
+- Support for 4.15 kernels
+
 0.42 2016-04-23
 ---------------------
 - fixes for newer kernels
