@@ -1,0 +1,16 @@
+# See the documentation for more information:
+# https://packit.dev/docs/configuration/
+
+specfile_path: tp_smapi.spec
+
+# add or remove files that should be synced
+files_to_sync:
+    - tp_smapi.spec
+    - .packit.yaml
+
+# name in upstream package repository/registry (e.g. in PyPI)
+upstream_package_name: tp_smapi
+# downstream (Fedora) RPM package name
+downstream_package_name: tp_smapi
+
+upstream_tag_template: tp-smapi/{version}
