@@ -102,7 +102,7 @@ set-version: check-ver
 	perl -i -pe 's/^(#define TP_VERSION ").*/$${1}$(VER)"/' thinkpad_ec.c tp_smapi.c
 	perl -i -pe 's/^(TP_VER := ).*/$${1}$(VER)/' Makefile
 	perl -i -pe 's/^(PACKAGE_VERSION=").*/$${1}$(VER)"/' dkms.conf
-	perl -i -pe 's/^(%define version ).*/$${1}$(VER)/' tp_smapi.spec
+	perl -i -pe 's/^(Version:\s+).*/$${1}$(VER)/' tp_smapi.spec
 
 create-tgz: check-ver
 	git archive  --format=tar --prefix=tp_smapi-$(VER)/ HEAD | gzip -c > $(TGZ)
