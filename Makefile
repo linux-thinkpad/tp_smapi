@@ -32,7 +32,7 @@ endif
 
 DEBUG := 0
 
-.PHONY: default clean modules load unload install patch check_hdaps mk-hdaps.diff \
+.PHONY: default clean modules load unload install check_hdaps \
 	check-ver set-version create-tgz create-rpm
 export TP_MODULES
 
@@ -49,9 +49,8 @@ clean:
 	rm -f tp_smapi.mod.* tp_smapi.o tp_smapi.ko .tp_smapi.*.cmd
 	rm -f thinkpad_ec.mod.* thinkpad_ec.o thinkpad_ec.ko .thinkpad_ec.*.cmd
 	rm -f hdaps.mod.* hdaps.o hdaps.ko .hdaps.*.cmd
-	rm -f *~ diff/*~ *.orig diff/*.orig *.rej diff/*.rej
-	rm -f tp_smapi-*-for-*.patch
-	rm -fr .tmp_versions Modules.symvers diff/hdaps.diff.tmp
+	rm -f *~ *.orig *.rej
+	rm -fr .tmp_versions Modules.symvers
 
 load: check_hdaps unload modules
 	@( [ `id -u` == 0 ] || { echo "Must be root to load modules"; exit 1; } )
@@ -85,59 +84,6 @@ endif
 	$(MAKE) -C $(KBUILD) M=$(PWD) O=$(KBUILD) modules_install
 	depmod $(KVER)
 
-
-#####################################################################
-# Generate a stand-alone kernel patch
-
-TP_VER := 0.44
-ORG    := a
-NEW    := b
-PATCH  := tp_smapi-$(TP_VER)-for-$(KVER).patch
-
-BASE_IN_PATCH  := 1
-SMAPI_IN_PATCH := 1
-HDAPS_IN_PATCH := 1
-
-patch: $(KSRC)
-	@TMPDIR=`mktemp -d /tmp/tp_smapi-patch.XXXXXX` &&\
-	echo "Working directory: $$TMPDIR" &&\
-	cd $$TMPDIR &&\
-	mkdir -p $(ORG)/$(TP_DIR) &&\
-	mkdir -p $(ORG)/$(IDIR) &&\
-	mkdir -p $(ORG)/drivers/platform/x86 &&\
-	cp $(KSRC)/$(TP_DIR)/{Kconfig,Makefile} $(ORG)/$(TP_DIR) &&\
-	cp $(KSRC)/drivers/platform/x86/{Kconfig,hdaps.c} $(ORG)/drivers/platform/x86/ &&\
-	cp -r $(ORG) $(NEW) &&\
-	\
-	if [ "$(BASE_IN_PATCH)" == 1 ]; then \
-		cp $(PWD)/thinkpad_ec.c $(NEW)/$(TP_DIR)/thinkpad_ec.c &&\
-		cp $(PWD)/thinkpad_ec.h $(NEW)/$(TP_DIR)/thinkpad_ec.h &&\
-		perl -i -pe 'print `cat $(PWD)/diff/Kconfig-thinkpad_ec.add` if m/^(endmenu|endif # X86_PLATFORM_DEVICES)$$/' $(NEW)/$(TP_DIR)/Kconfig &&\
-		sed -i -e '$$aobj-$$(CONFIG_THINKPAD_EC)       += thinkpad_ec.o' $(NEW)/$(TP_DIR)/Makefile \
-	; fi &&\
-	\
-	if [ "$(HDAPS_IN_PATCH)" == 1 ]; then \
-		cp $(PWD)/hdaps.c $(NEW)/drivers/platform/x86/ &&\
-		perl -i -0777 -pe 's/(config SENSORS_HDAPS\n\ttristate [^\n]+\n\tdepends [^\n]+\n)/$$1\tselect THINKPAD_EC\n/' $(NEW)/drivers/platform/x86/Kconfig  \
-	; fi &&\
-	\
-	if [ "$(SMAPI_IN_PATCH)" == 1 ]; then \
-		sed -i -e '$$aobj-$$(CONFIG_TP_SMAPI)          += tp_smapi.o' $(NEW)/$(TP_DIR)/Makefile &&\
-		perl -i -pe 'print `cat $(PWD)/diff/Kconfig-tp_smapi.add` if m/^(endmenu|endif # X86_PLATFORM_DEVICES)$$/' $(NEW)/$(TP_DIR)/Kconfig &&\
-		cp $(PWD)/tp_smapi.c $(NEW)/$(TP_DIR)/tp_smapi.c &&\
-		mkdir -p $(NEW)/Documentation &&\
-		perl -0777 -pe 's/\n(Installation\n---+|Conflict with HDAPS\n---+|Files in this package\n---+|Setting and getting CD-ROM speed:\n).*?\n(?=[^\n]*\n-----)/\n/gs' $(PWD)/README > $(NEW)/Documentation/tp_smapi.txt \
-	; fi &&\
-	\
-	{ diff -dNurp $(ORG) $(NEW) > patch \
-	  || [ $$? -lt 2 ]; } &&\
-	{ echo "Generated for $(KVER) in $(KSRC)"; echo; diffstat patch; echo; echo; cat patch; } \
-	  > $(PWD)/${PATCH} &&\
-	rm -r $$TMPDIR
-	@echo
-	@diffstat ${PATCH}
-	@echo -e "\nPatch file created:\n  ${PATCH}"
-	@echo -e "To apply, use:\n  patch -p1 -d ${KSRC} < ${PATCH}"
 
 #####################################################################
 # Tools for preparing a release. Ignore these.

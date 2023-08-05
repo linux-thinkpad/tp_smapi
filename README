@@ -326,8 +326,6 @@ thinkpad_ec.*
 hdaps.c
   Modified version of hdaps.c driver from mainline kernel, patched to use
   thinkpad_ec and several other improvements.
-diff/*  (excluding above)
-  Used by "make patch" to create a clean stand-alone patch.
 
 
 More about SMAPI
