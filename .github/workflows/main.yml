@@ -23,6 +23,12 @@ jobs:
           - master
         host:
           - ubuntu-22.04
+        cc:
+          - gcc
+        include:
+          - linux: master
+            host: ubuntu-24.04
+            cc: clang
     steps:
       - uses: actions/checkout@v4
         with:
@@ -35,14 +41,14 @@ jobs:
       - run: sudo apt-get install -y libelf-dev ccache
       - uses: hendrikmuhs/ccache-action@v1.2
         with:
-          key: ${{ matrix.linux }}
+          key: ${{ matrix.linux }}-${{ matrix.cc }}
       - name: Configure kernel
         run: |
-          make -C linux tinyconfig
+          make -C linux tinyconfig CC=${{ matrix.cc }}
           echo -e "CONFIG_64BIT=y\nCONFIG_X86_64=y\nCONFIG_MODULES=y\nCONFIG_INPUT=y" > linux/kernel/configs/ci.config
-          make -C linux ci.config
-      - name: Run make -C linux
+          make -C linux ci.config CC=${{ matrix.cc }}
+      - name: Run make -C linux CC=${{ matrix.cc }}
         run: |
           export PATH="/usr/lib/ccache:$PATH"
-          make -C linux -j $(nproc)
-      - run: make -C tp_smapi modules KBUILD=../linux HDAPS=1
+          make -C linux -j $(nproc) CC=${{ matrix.cc }}
+      - run: make -C tp_smapi modules KBUILD=../linux HDAPS=1 CC=${{ matrix.cc }}
