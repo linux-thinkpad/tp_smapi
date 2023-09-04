@@ -23,10 +23,10 @@ jobs:
           - v6.1
           - master
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           path: tp_smapi
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           repository: torvalds/linux
           ref: ${{ matrix.linux }}
