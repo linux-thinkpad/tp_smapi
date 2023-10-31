@@ -22,6 +22,11 @@ jobs:
           - v5.10
           - v6.1
           - master
+        cc:
+          - gcc
+        include:
+          - linux: master
+            cc: clang
     steps:
       - uses: actions/checkout@v4
         with:
@@ -34,10 +39,10 @@ jobs:
       - run: sudo apt-get install -y libelf-dev ccache
       - uses: hendrikmuhs/ccache-action@v1.2
         with:
-          key: ${{ matrix.linux }}
-      - run: make -C linux defconfig
-      - name: Run make -C linux
+          key: ${{ matrix.linux }}-${{ matrix.cc }}
+      - run: make -C linux CC=${{ matrix.cc }} defconfig
+      - name: Run make -C linux CC=${{ matrix.cc }}
         run: |
           export PATH="/usr/lib/ccache:$PATH"
-          make -C linux -j $(nproc)
-      - run: make -C tp_smapi modules KBUILD=../linux HDAPS=1
+          make -C linux -j $(nproc) CC=${{ matrix.cc }}
+      - run: make -C tp_smapi modules KBUILD=../linux HDAPS=1 CC=${{ matrix.cc }}

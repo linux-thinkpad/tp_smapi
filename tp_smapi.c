@@ -201,7 +201,7 @@ static int smapi_request(u32 inEBX, u32 inECX,
 			 "=m"(tmpEDI),
 			 "=m"(tmpESI)
 			:"m"(inEBX), "m"(inECX), "m"(inEDI), "m"(inESI),
-			 "m"((u16)smapi_port)
+			 "m"(smapi_port)
 			:"%eax", "%ebx", "%ecx", "%edx", "%edi",
 			 "%esi");
 
