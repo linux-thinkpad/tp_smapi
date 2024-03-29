@@ -357,3 +357,4 @@ The interface provides various system management services (currently known:
 battery information and accelerometer readouts). For more information see the
 thinkpad_ec module and the H8S hardware documentation:
 http://documentation.renesas.com/eng/products/mpumcu/rej09b0300_2140bhm.pdf
+
