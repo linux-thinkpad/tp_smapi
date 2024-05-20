@@ -14,14 +14,18 @@ concurrency:
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: ${{ matrix.host }}
     strategy:
       fail-fast: false
       matrix:
         linux:
-          - v5.10
           - v6.1
           - master
+        host:
+          - ubuntu-22.04
+        include:
+          - linux: v5.10
+            host: ubuntu-20.04
     steps:
       - uses: actions/checkout@v4
         with:
