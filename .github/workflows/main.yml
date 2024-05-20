@@ -39,7 +39,11 @@ jobs:
       - uses: hendrikmuhs/ccache-action@v1.2
         with:
           key: ${{ matrix.linux }}
-      - run: make -C linux defconfig
+      - name: Configure kernel
+        run: |
+          make -C linux tinyconfig
+          echo -e "CONFIG_64BIT=y\nCONFIG_X86_64=y\nCONFIG_MODULES=y\nCONFIG_INPUT=y" > linux/kernel/configs/ci.config
+          make -C linux ci.config
       - name: Run make -C linux
         run: |
           export PATH="/usr/lib/ccache:$PATH"
