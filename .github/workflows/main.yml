@@ -23,9 +23,6 @@ jobs:
           - master
         host:
           - ubuntu-22.04
-        include:
-          - linux: v5.10
-            host: ubuntu-20.04
     steps:
       - uses: actions/checkout@v4
         with:
