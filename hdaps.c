@@ -427,7 +427,11 @@ static int hdaps_probe(struct platform_device *dev)
 static int hdaps_suspend(struct platform_device *dev, pm_message_t state)
 {
 	/* Don't do hdaps polls until resume re-initializes the sensor. */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6,15,0)
 	del_timer_sync(&hdaps_timer);
+#else
+	timer_delete_sync(&hdaps_timer);
+#endif
 	hdaps_device_shutdown(); /* ignore errors, effect is negligible */
 	return 0;
 }
@@ -671,7 +675,11 @@ static void hdaps_mousedev_close(struct input_dev *dev)
 {
 	mutex_lock(&hdaps_users_mtx);
 	if (--hdaps_users == 0) /* no input users left */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6,15,0)
 		del_timer_sync(&hdaps_timer);
+#else
+		timer_delete_sync(&hdaps_timer);
+#endif
 	mutex_unlock(&hdaps_users_mtx);
 
 	module_put(THIS_MODULE);
