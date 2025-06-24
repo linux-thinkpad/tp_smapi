@@ -1,7 +1,7 @@
 %define module tp_smapi
 
 Name:           %{module}
-Version:        0.44
+Version:        0.45
 Release:        1%{?dist}
 Summary:        IBM ThinkPad hardware functions driver - DKMS version
 License:        GPLv2
