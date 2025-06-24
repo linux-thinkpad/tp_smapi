@@ -8,6 +8,10 @@ files_to_sync:
     - tp_smapi.spec
     - .packit.yaml
 
+actions:
+  get-current-version:
+    - bash -c "grep '#define TP_VERSION' tp_smapi.c | tr -c -d '[0-9.]'"
+
 # name in upstream package repository/registry (e.g. in PyPI)
 upstream_package_name: tp_smapi
 # downstream (Fedora) RPM package name
