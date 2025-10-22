@@ -30,3 +30,9 @@ jobs:
 
   - <<: *copr
     job: tests
+
+  - <<: *copr
+    trigger: commit
+    branch: master
+    owner: evgeni
+    project: linux-thinkpad-devel
