@@ -18,3 +18,15 @@ upstream_package_name: tp_smapi
 downstream_package_name: tp_smapi
 
 upstream_tag_template: tp-smapi/{version}
+
+jobs:
+  - &copr
+    job: copr_build
+    trigger: pull_request
+    targets:
+      - epel-9
+      - epel-10
+      - fedora-stable
+
+  - <<: *copr
+    job: tests
