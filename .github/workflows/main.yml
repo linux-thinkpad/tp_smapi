@@ -30,10 +30,10 @@ jobs:
             host: ubuntu-24.04
             cc: clang
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           path: tp_smapi
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           repository: torvalds/linux
           ref: ${{ matrix.linux }}
