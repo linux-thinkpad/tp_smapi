@@ -22,7 +22,7 @@ jobs:
           - v6.1
           - master
         host:
-          - ubuntu-22.04
+          - ubuntu-24.04
         cc:
           - gcc
         include:
