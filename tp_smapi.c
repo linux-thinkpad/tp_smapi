@@ -669,7 +669,7 @@ static ssize_t show_tp_ec_bat_str(u8 arg0, int offset, int maxlen,
 	ret = read_tp_ec_row(arg0, bat, 0, row);
 	if (ret)
 		return ret;
-	strncpy(buf, (char *)row+offset, maxlen);
+	strscpy(buf, (char *)row+offset, maxlen);
 	buf[maxlen] = 0;
 	strcat(buf, "\n");
 	return strlen(buf);
